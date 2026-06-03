@@ -1,20 +1,20 @@
 /**
  * API Service Layer
- * Handles all backend communication
+ * Handles all backend communication with Engineer 5 RAG backend
  */
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:7777';
 
 const api = {
   /**
    * Send a query to the backend and get a grounded answer with sources
    * @param {string} userQuery - The user's question
    * @param {object} metadataFilter - Optional metadata filter (e.g., { department: 'Engineering' })
-   * @returns {Promise<{answer: string, sources: Array, status: string, confidence_score: number}>}
+   * @returns {Promise<{answer: string, citations: Array, status: string, confidence_score: number}>}
    */
   query: async (userQuery, metadataFilter = null) => {
     try {
-      const response = await fetch(`${API_BASE}/query`, {
+      const response = await fetch(`${API_BASE}/api/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,7 +30,18 @@ const api = {
       }
 
       const data = await response.json();
-      return data;
+      // Convert backend format (citations) to frontend format (sources)
+      return {
+        answer: data.answer,
+        sources: (data.citations || []).map(citation => ({
+          document: citation.document_name,
+          chunk_id: citation.chunk_id,
+          relevance_score: citation.relevance_score,
+          text_snippet: citation.text_snippet,
+        })),
+        status: data.status,
+        confidence_score: data.confidence_score,
+      };
     } catch (error) {
       console.error('Query failed:', error);
       throw error;

@@ -1,11 +1,11 @@
-def compute_rrf(dense_results, sparse_results, k=60, top_n=3):
+def compute_rrf(dense_results, sparse_results, k=10, top_n=3):
     """
     Reciprocal Rank Fusion (RRF) combines dense and sparse search results.
 
     Args:
         dense_results: List of dictionaries with chunk_id, text_content, metadata
         sparse_results: List of dictionaries with chunk_id, text_content, metadata
-        k: RRF constant (default 60)
+        k: RRF constant (default 10, adjusted for development to produce meaningful scores)
         top_n: Number of top results to return
 
     Returns:

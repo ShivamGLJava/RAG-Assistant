@@ -60,29 +60,41 @@ function ChatInterface() {
             role: 'assistant',
             content: response.answer,
             sources: [],
-            confidenceScore: 0,
+            confidenceScore: response.confidence_score || 0,
           },
         ]);
       } else if (response.status === 'success') {
-        // Normal successful response
+        // Normal successful response with LLM answer
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
             content: response.answer,
             sources: response.sources || [],
-            confidenceScore: response.confidence_score,
+            confidenceScore: response.confidence_score || 0,
           },
         ]);
       } else if (response.status === 'error') {
-        // Error response
+        // Error response (e.g., Ollama not running)
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
             content: `⚠️ ${response.answer}`,
             error: true,
-            sources: [],
+            sources: response.sources || [],
+            confidenceScore: response.confidence_score || 0,
+          },
+        ]);
+      } else {
+        // Default case for any status
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: response.answer || 'No response received',
+            sources: response.sources || [],
+            confidenceScore: response.confidence_score || 0,
           },
         ]);
       }
@@ -95,7 +107,7 @@ function ChatInterface() {
           role: 'assistant',
           content: `❌ Error: Unable to process query. ${error.message}. ${
             !useMockData
-              ? 'Make sure the backend server is running on http://localhost:8000'
+              ? 'Make sure the backend server is running on http://127.0.0.1:8001'
               : ''
           }`,
           error: true,
