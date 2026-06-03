@@ -13,8 +13,8 @@ print(f"\nIndexing {len(chunks)} chunks...")
 index_chunks(chunks)
 
 results = semantic_search(
-    "What is Amazon EC2?",
-    limit=5
+    "What is Amazon S3?",
+    department="Engineering"
 )
 
 print("\nSearch Results:\n")
