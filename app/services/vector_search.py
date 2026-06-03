@@ -1,12 +1,17 @@
-from qdrant_client.models import PointStruct
+from qdrant_client.models import (
+    PointStruct,
+    Filter,
+    FieldCondition,
+    MatchValue
+)
 
-from embedding_model import generate_embedding
-from qdrant_store import (
+from .embedding_model import generate_embedding
+from .qdrant_store import (
     client,
     COLLECTION_NAME,
     initialize_collection
 )
-initialize_collection()
+
 
 def index_chunks(chunks):
 
@@ -42,14 +47,42 @@ def index_chunks(chunks):
 
 def semantic_search(
     query: str,
-    limit: int = 10
+    limit: int = 10,
+    department: str = None,
+    source_document: str = None
 ):
 
     query_vector = generate_embedding(query)
 
+    conditions = []
+
+    if department:
+        conditions.append(
+            FieldCondition(
+                key="department",
+                match=MatchValue(value=department)
+            )
+        )
+
+    if source_document:
+        conditions.append(
+            FieldCondition(
+                key="source_document",
+                match=MatchValue(value=source_document)
+            )
+        )
+
+    search_filter = None
+
+    if conditions:
+        search_filter = Filter(
+            must=conditions
+        )
+
     results = client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
+        query_filter=search_filter,
         limit=limit
     )
 
@@ -73,6 +106,8 @@ def semantic_search(
 
 if __name__ == "__main__":
 
+    initialize_collection()
+
     sample_chunks = [
         {
             "content":
@@ -95,7 +130,9 @@ if __name__ == "__main__":
     index_chunks(sample_chunks)
 
     results = semantic_search(
-        "How do I troubleshoot CrashLoopBackOff?"
+        query="How do I troubleshoot CrashLoopBackOff?",
+        department="Engineering",
+        source_document="kubernetes.pdf"
     )
 
     print(results)
