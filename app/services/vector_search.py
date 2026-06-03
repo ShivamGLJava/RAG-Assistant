@@ -1,7 +1,7 @@
 from qdrant_client.models import PointStruct
 
-from embedding_model import generate_embedding
-from qdrant_store import (
+from .embedding_model import generate_embedding
+from .qdrant_store import (
     client,
     COLLECTION_NAME,
     initialize_collection
