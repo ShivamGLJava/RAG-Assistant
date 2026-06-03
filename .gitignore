@@ -1,0 +1,67 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# VS Code
+.vscode/
+
+# Qdrant local storage
+qdrant_data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Environment variables
+.env
+
+# Hugging Face cache (if stored locally)
+.cache/
+*.so
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Project specific
+results/
+outputs/
+*.pickle
+*.pkl
