@@ -50,17 +50,17 @@ class VectorStore:
                 must=[FieldCondition(key="department", match=MatchValue(value=dept_filter))]
             )
 
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=vector,
+            query=vector,
             query_filter=query_filter,
             limit=limit,
             with_payload=True
-        )
+        ).points
         return [
             {
                 "id": hit.id,
-                "score": hit.score,
+                "score": hit.score if hasattr(hit, "score") else 1.0,
                 "content": hit.payload["content"],
                 "metadata": hit.payload
             }
