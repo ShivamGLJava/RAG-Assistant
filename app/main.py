@@ -1,7 +1,7 @@
 import os
+from typing import List
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List
 from google import genai
 from app.services.lexical_search import keyword_search
 from app.services.rrf_fusion import compute_rrf
@@ -33,14 +33,9 @@ class QueryResponse(BaseModel):
 app = FastAPI(title="RAG-Assistant", version="1.0.0")
 
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-
-@app.post("/api/v1/search", response_model=QueryResponse)
-async def search(request: QueryRequest):
-    dense_mock_results = [
+async def _fetch_vector_search_results(query: str) -> list:
+    """Fetch dense vector search results. Placeholder for Qdrant integration."""
+    return [
         {
             "chunk_id": "doc_002_chk_3",
             "text_content": "Container CrashLoopBackOff occurs when your pod fails to start. Check logs with kubectl logs.",
@@ -58,8 +53,17 @@ async def search(request: QueryRequest):
         }
     ]
 
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+
+@app.post("/api/v1/search", response_model=QueryResponse)
+async def search(request: QueryRequest):
+    dense_results = await _fetch_vector_search_results(request.user_query)
     sparse_results = keyword_search(request.user_query)
-    fused_results = compute_rrf(dense_mock_results, sparse_results, k=60, top_n=3)
+    fused_results = compute_rrf(dense_results, sparse_results, k=60, top_n=3)
 
     context_chunks = []
     for rank, result in enumerate(fused_results, start=1):
@@ -77,6 +81,12 @@ async def search(request: QueryRequest):
                 source_document=doc_name,
                 text_content=text
             )
+        )
+
+    if not context_chunks:
+        return QueryResponse(
+            answer="I am sorry, but I cannot confidently deduce an answer based on the verified technical documentation provided.",
+            context_chunks=[]
         )
 
     context_blocks = []
