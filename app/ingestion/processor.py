@@ -12,11 +12,24 @@ class DocumentProcessor:
             separators=["\n\n", "\n", " ", ""]
         )
 
-    def extract_text_from_pdf(self, pdf_path: str) -> List[Dict[str, Any]]:
+    def extract_text_from_pdf(self, file_path: str) -> List[Dict[str, Any]]:
         """
-        Extracts text from PDF and returns a list of page-level data.
+        Extracts text from PDF or Text/Markdown and returns a list of page-level data.
         """
-        doc = fitz.open(pdf_path)
+        # Handle non-PDF files (Markdown, Text)
+        if not file_path.lower().endswith('.pdf'):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                text = f.read()
+            return [{
+                "text": text,
+                "metadata": {
+                    "source": file_path.split("/")[-1],
+                    "page": 1
+                }
+            }]
+
+        # Handle PDF files
+        doc = fitz.open(file_path)
         pages = []
         for page_num in range(len(doc)):
             page = doc.load_page(page_num)
@@ -24,7 +37,7 @@ class DocumentProcessor:
             pages.append({
                 "text": text,
                 "metadata": {
-                    "source": pdf_path.split("/")[-1],
+                    "source": file_path.split("/")[-1],
                     "page": page_num + 1
                 }
             })
