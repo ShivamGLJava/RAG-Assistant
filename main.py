@@ -1,78 +1,45 @@
-from app.services.lexical_search import keyword_search
-from app.services.rrf_fusion import compute_rrf
+"""Main entry point for RAG Document Ingestion Pipeline and Application Server"""
+
+import sys
+from app.services.ingestion_engine import IngestionEngine
 
 
-def main():
-    # Dense mock data aligned dynamically
-    dense_mock_results = [
-        {
-            "chunk_id": "doc_002_chk_3",
-            "Chunk ID": "doc_002_chk_3",
-            "text_content": "Container CrashLoopBackOff occurs when your pod fails to start. Check logs with kubectl logs.",
-            "metadata": {"source_document": "kubernetes_handbook.md", "source": "kubernetes_handbook.md"}
-        },
-        {
-            "chunk_id": "doc_004_chk_1",
-            "Chunk ID": "doc_004_chk_1",
-            "text_content": "Kubernetes debugging: inspect pod status and resource limits to resolve CrashLoopBackOff.",
-            "metadata": {"source_document": "k8s_debugging.md", "source": "k8s_debugging.md"}
-        },
-        {
-            "chunk_id": "doc_001_chk_1",
-            "Chunk ID": "doc_001_chk_1",
-            "text_content": "To fix a 502 Bad Gateway error, check your upstream server status and verify network connectivity.",
-            "metadata": {"source_document": "troubleshooting_guide.md", "source": "troubleshooting_guide.md"}
-        },
-        {
-            "chunk_id": "doc_005_chk_2",
-            "Chunk ID": "doc_005_chk_2",
-            "text_content": "HTTP status codes: 502 Bad Gateway means upstream service unavailable or misconfigured.",
-            "metadata": {"source_document": "http_reference.md", "source": "http_reference.md"}
-        }
-    ]
+def run_ingestion():
+    """Execute document ingestion pipeline for FAQs.pdf and AWS.pdf"""
+    engine = IngestionEngine()
+    results = engine.ingest_documents()
 
-    user_query = "How do I fix a 502 error and container CrashLoopBackOff anomalies?"
+    print("\n" + "=" * 70)
+    print("📦 INGESTION COMPLETE - SUMMARY")
+    print("=" * 70)
 
-    print(f"User Query: {user_query}\n")
-    print("=" * 80)
+    print("\nFIXED-SIZE STRATEGY:")
+    fixed_total = 0
+    for doc_name, chunks in results["fixed"].items():
+        fixed_total += len(chunks)
+        print(f"  {doc_name.upper()}: {len(chunks)} chunks")
+    print(f"  TOTAL: {fixed_total} chunks")
 
-    # 1. Sparse / Lexical Run
-    sparse_results = keyword_search(user_query)
-    print(f"Lexical Search Results ({len(sparse_results)} found):")
-    for i, result in enumerate(sparse_results, start=1):
-        c_id = result.get("chunk_id", result.get("Chunk ID", "N/A"))
-        meta = result.get("metadata", {})
-        doc_name = meta.get("source_document", meta.get("source", "Unknown"))
-        print(f"  {i}. Chunk {c_id}: {doc_name}")
+    print("\nSEMANTIC STRATEGY:")
+    semantic_total = 0
+    for doc_name, chunks in results["semantic"].items():
+        semantic_total += len(chunks)
+        print(f"  {doc_name.upper()}: {len(chunks)} chunks")
+    print(f"  TOTAL: {semantic_total} chunks")
 
-    print("\n" + "=" * 80)
-    print(f"Dense Vector Search Results ({len(dense_mock_results)} mocked):")
-    for i, result in enumerate(dense_mock_results, start=1):
-        c_id = result.get("chunk_id", result.get("Chunk ID", "N/A"))
-        meta = result.get("metadata", {})
-        doc_name = meta.get("source_document", meta.get("source", "Unknown"))
-        print(f"  {i}. Chunk {c_id}: {doc_name}")
-
-    print("\n" + "=" * 80)
-    print("RRF Fusion (k=60, top_n=3):")
-    print("=" * 80 + "\n")
-
-    # 2. Compute Fusion Blending
-    fused_results = compute_rrf(dense_mock_results, sparse_results, k=60, top_n=3)
-
-    # 3. Print Results Safely handling both Lowercase and Uppercase backends
-    for rank, candidate in enumerate(fused_results, start=1):
-        c_id = candidate.get("chunk_id", candidate.get("Chunk ID", "N/A"))
-        score = candidate.get("rrf_score", candidate.get("Calculated RRF Score", 0.0))
-        meta = candidate.get("metadata", {})
-        doc_name = meta.get("source_document", meta.get("source", candidate.get("Source Document Name", "Unknown")))
-        
-        print(f"Rank: {rank}")
-        print(f"Chunk ID: {c_id}")
-        print(f"Calculated RRF Score: {score}")
-        print(f"Source Document Name: {doc_name}")
-        print("-" * 80)
+    print(f"\n✅ Both strategies ready for Engineer 2 (Qdrant Vector Storage)")
+    print(f"📝 Chunks will be compared using RAGAS metrics in later stages")
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--ingest":
+        run_ingestion()
+    else:
+        print("\n" + "=" * 80)
+        print("Cloud Infrastructure Auditing Engine - RAG Assistant")
+        print("=" * 80 + "\n")
+        print("To launch the FastAPI server, run:")
+        print("\n  uvicorn app.main:app --reload\n")
+        print("To run the document ingestion pipeline (FAQs.pdf, AWS.pdf), use:")
+        print("\n  python main.py --ingest\n")
+        print("=" * 80 + "\n")
