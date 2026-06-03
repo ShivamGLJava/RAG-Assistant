@@ -71,5 +71,41 @@ async def search(request: QueryRequest):
             )
         )
 
-    answer = f"Retrieved {len(context_chunks)} relevant context chunks for: {request.user_query}"
-    return QueryResponse(answer=answer, context_chunks=context_chunks)
+    # ==================== STEP 2: CONTEXT ORCHESTRATION PROMPT BUILDER ====================
+    # Extract, isolate, and wrap text pieces into structured XML tags
+    context_blocks = []
+    for chunk in context_chunks:
+        block = f"<context_content source='{chunk.source_document}'>\n{chunk.text_content}\n</context_content>"
+        context_blocks.append(block)
+    
+    joined_context = "\n\n".join(context_blocks)
+
+    # Construct the unyielding system prompt template layout
+    system_prompt = (
+        "You are an elite Technical Support Copilot. Answer the user query using ONLY the verified context text pieces provided below. "
+        "If the answer cannot be confidently deduced from the context, respond with your exact fallback text pattern.\n\n"
+        f"Context:\n{joined_context}\n\n"
+        f"User Query: {request.user_query}"
+    )
+    # =====================================================================================
+
+    return QueryResponse(answer=system_prompt, context_chunks=context_chunks)
+
+
+# LOCAL EXECUTION TEST RUNNER (Allows terminal output verification)
+if __name__ in ("__main__", "app.main"):
+    import asyncio
+    
+    print("\n" + "=" * 80)
+    print("Testing API Route Orchestration Loop locally via terminal...")
+    print("=" * 80 + "\n")
+    
+    mock_request = QueryRequest(user_query="How do I fix a 502 error and container CrashLoopBackOff anomalies?")
+    
+    # Simulate an incoming async endpoint request call
+    response = asyncio.run(search(mock_request))
+    
+    print("ORCHESTRATED ENGINE RESPONSE ('answer' key payload):")
+    print("-" * 80)
+    print(response.answer)
+    print("=" * 80 + "\n")
