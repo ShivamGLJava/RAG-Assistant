@@ -1,8 +1,16 @@
+import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
+from google import genai
 from app.services.lexical_search import keyword_search
 from app.services.rrf_fusion import compute_rrf
+
+API_KEY = os.environ.get("GEMINI_API_KEY")
+if not API_KEY:
+    raise RuntimeError("GEMINI_API_KEY environment variable is not set or is empty")
+
+client = genai.Client(api_key=API_KEY)
 
 
 class QueryRequest(BaseModel):
@@ -85,4 +93,13 @@ async def search(request: QueryRequest):
         f"User Query: {request.user_query}"
     )
 
-    return QueryResponse(answer=system_prompt, context_chunks=context_chunks)
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=system_prompt
+        )
+        answer = response.text
+    except Exception as e:
+        answer = f"[LLM INVOCATION EXCEPTION ERROR]: {str(e)}"
+
+    return QueryResponse(answer=answer, context_chunks=context_chunks)
