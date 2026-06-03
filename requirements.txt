@@ -4,3 +4,7 @@ langchain-text-splitters==0.2.0
 pymupdf==1.24.1
 pydantic==2.6.3
 python-dotenv==1.0.1
+numpy==1.24.3
+nltk==3.8.1
+sentence-transformers==2.2.2
+torch==2.0.1
