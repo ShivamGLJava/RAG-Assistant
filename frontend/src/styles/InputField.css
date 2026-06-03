@@ -1,0 +1,150 @@
+.input-container {
+  padding: 20px;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.query-form {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.input-wrapper {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.query-input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.query-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.query-input:disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.submit-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  min-width: 100px;
+  justify-content: center;
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submit-btn.loading {
+  position: relative;
+}
+
+.send-icon {
+  font-size: 16px;
+  transition: transform 0.3s ease;
+}
+
+.submit-btn:hover:not(:disabled) .send-icon {
+  transform: translateX(2px);
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.input-hint {
+  display: block;
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .input-container {
+    padding: 12px;
+  }
+
+  .input-wrapper {
+    gap: 8px;
+  }
+
+  .query-input {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .submit-btn {
+    padding: 10px 16px;
+    font-size: 13px;
+    min-width: 80px;
+  }
+
+  .input-hint {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .submit-btn {
+    min-width: auto;
+    padding: 10px 12px;
+  }
+
+  .submit-btn span:not(.spinner) {
+    display: none;
+  }
+
+  .submit-btn .send-icon::before {
+    content: '→';
+  }
+}
