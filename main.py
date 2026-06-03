@@ -1,10 +1,9 @@
-"""Main entry point for RAG Document Ingestion Pipeline"""
+﻿"""Main entry point for RAG Document Ingestion Pipeline and Application Server"""
 
+import sys
 from app.services import IngestionEngine
 
-
-def main():
-    """Run the ingestion pipeline with both chunking strategies."""
+def run_ingestion():
     engine = IngestionEngine()
     results = engine.ingest_documents()
 
@@ -29,6 +28,9 @@ def main():
     print(f"\n✅ Both strategies ready for Engineer 2 (Qdrant Vector Storage)")
     print(f"📝 Chunks will be compared using RAGAS metrics in later stages")
 
-
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--ingest":
+        run_ingestion()
+    else:
+        print("RAG-Assistant Application Server Initialized.")
+        print("To launch the FastAPI server, use: uvicorn app.main:app --reload")

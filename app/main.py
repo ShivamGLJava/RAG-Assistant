@@ -1,78 +1,69 @@
-"""
-FastAPI Server Scaffold for Enterprise RAG Assistant
-Engineer 3 (BA-A): Backend API Scaffold & Data Contracts
-"""
+﻿from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import List
+from app.services.lexical_search import keyword_search
+from app.services.rrf_fusion import compute_rrf
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.models.schemas import QueryRequest, QueryResponse
+class QueryRequest(BaseModel):
+    user_query: str
 
-app = FastAPI(
-    title="Enterprise RAG Assistant",
-    description="A production-ready RAG system for internal technical support.",
-    version="1.0.0",
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json"
-)
+class ContextChunk(BaseModel):
+    rank: int
+    chunk_id: str
+    rrf_score: float
+    source_document: str
+    text_content: str
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+class QueryResponse(BaseModel):
+    answer: str
+    context_chunks: List[ContextChunk]
 
+app = FastAPI(title="RAG-Assistant", version="1.0.0")
 
-@app.get("/health", tags=["System"])
+@app.get("/health")
 async def health_check():
-    """
-    Health check endpoint to verify the API service is running.
-    Returns: status, version, and service availability message.
-    """
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "message": "FastAPI server is running and reachable."
-    }
+    return {"status": "healthy"}
 
+@app.post("/api/v1/search", response_model=QueryResponse)
+async def search(request: QueryRequest):
+    dense_mock_results = [
+        {
+            "chunk_id": "doc_002_chk_3",
+            "text_content": "Container CrashLoopBackOff occurs when your pod fails to start. Check logs with kubectl logs.",
+            "metadata": {"source_document": "kubernetes_handbook.md", "source": "kubernetes_handbook.md"}
+        },
+        {
+            "chunk_id": "doc_004_chk_1",
+            "text_content": "Kubernetes debugging: inspect pod status and resource limits to resolve CrashLoopBackOff.",
+            "metadata": {"source_document": "k8s_debugging.md", "source": "k8s_debugging.md"}
+        },
+        {
+            "chunk_id": "doc_001_chk_1",
+            "text_content": "To fix a 502 Bad Gateway error, check your upstream server status and verify network connectivity.",
+            "metadata": {"source_document": "troubleshooting_guide.md", "source": "troubleshooting_guide.md"}
+        }
+    ]
 
-@app.post("/api/v1/chat", response_model=QueryResponse, tags=["RAG"])
-async def chat_endpoint(request: QueryRequest) -> QueryResponse:
-    """
-    Main RAG chat endpoint.
+    sparse_results = keyword_search(request.user_query)
+    fused_results = compute_rrf(dense_mock_results, sparse_results, k=60, top_n=3)
 
-    Input: QueryRequest with user_query and optional metadata_filter
-    Output: QueryResponse with answer, citations, and status
+    context_chunks = []
+    for rank, result in enumerate(fused_results, start=1):
+        c_id = str(result.get("chunk_id", result.get("Chunk ID", "N/A")))
+        score = float(result.get("rrf_score", result.get("Calculated RRF Score", 0.0)))
+        meta = result.get("metadata", {})
+        doc_name = meta.get("source_document", meta.get("source", result.get("source_document", "Unknown")))
+        text = result.get("text_content", "")
 
-    Integration point for Engineer 5 (Orchestration):
-    - Pass request to hybrid_search engine (Engineer 2 + Engineer 4)
-    - Inject top-3 results into Llama-3-8B prompt template
-    - Apply Hallucination Control Firewall
-    - Return grounded answer with citations
-    """
-    return QueryResponse(
-        answer="FastAPI scaffold is ready. Awaiting Engineer 5 orchestration integration.",
-        citations=[],
-        status="pending_orchestration"
-    )
+        context_chunks.append(
+            ContextChunk(
+                rank=rank,
+                chunk_id=c_id,
+                rrf_score=score,
+                source_document=doc_name,
+                text_content=text
+            )
+        )
 
-
-@app.get("/api/v1/status", tags=["System"])
-async def pipeline_status():
-    """
-    Returns the current status of RAG pipeline components.
-    Helps engineers verify their integrations are connected.
-    """
-    return {
-        "engineer_1_ingestion": "pending",
-        "engineer_2_qdrant": "pending",
-        "engineer_3_fastapi": "ready",
-        "engineer_4_hybrid_search": "pending",
-        "engineer_5_orchestration": "pending"
-    }
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    answer = f"Retrieved {len(context_chunks)} relevant context chunks for: {request.user_query}"
+    return QueryResponse(answer=answer, context_chunks=context_chunks)
