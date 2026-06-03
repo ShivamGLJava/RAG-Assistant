@@ -1,21 +1,11 @@
-import os
-from typing import List
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from pydantic import BaseModel
-from google import genai
+from typing import List
 from app.services.lexical_search import keyword_search
 from app.services.rrf_fusion import compute_rrf
 
-API_KEY = os.environ.get("GEMINI_API_KEY")
-if not API_KEY:
-    raise RuntimeError("GEMINI_API_KEY environment variable is not set or is empty")
-
-client = genai.Client(api_key=API_KEY)
-
-
 class QueryRequest(BaseModel):
     user_query: str
-
 
 class ContextChunk(BaseModel):
     rank: int
@@ -24,18 +14,19 @@ class ContextChunk(BaseModel):
     source_document: str
     text_content: str
 
-
 class QueryResponse(BaseModel):
     answer: str
     context_chunks: List[ContextChunk]
 
-
 app = FastAPI(title="RAG-Assistant", version="1.0.0")
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
-async def _fetch_vector_search_results(query: str) -> list:
-    """Fetch dense vector search results. Placeholder for Qdrant integration."""
-    return [
+@app.post("/api/v1/search", response_model=QueryResponse)
+async def search(request: QueryRequest):
+    dense_mock_results = [
         {
             "chunk_id": "doc_002_chk_3",
             "text_content": "Container CrashLoopBackOff occurs when your pod fails to start. Check logs with kubectl logs.",
@@ -53,24 +44,15 @@ async def _fetch_vector_search_results(query: str) -> list:
         }
     ]
 
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-
-@app.post("/api/v1/search", response_model=QueryResponse)
-async def search(request: QueryRequest):
-    dense_results = await _fetch_vector_search_results(request.user_query)
     sparse_results = keyword_search(request.user_query)
-    fused_results = compute_rrf(dense_results, sparse_results, k=60, top_n=3)
+    fused_results = compute_rrf(dense_mock_results, sparse_results, k=60, top_n=3)
 
     context_chunks = []
     for rank, result in enumerate(fused_results, start=1):
         c_id = str(result.get("chunk_id", result.get("Chunk ID", "N/A")))
         score = float(result.get("rrf_score", result.get("Calculated RRF Score", 0.0)))
         meta = result.get("metadata", {})
-        doc_name = meta.get("source_document", meta.get("source", result.get("Source Document Name", "Unknown")))
+        doc_name = meta.get("source_document", meta.get("source", result.get("source_document", "Unknown")))
         text = result.get("text_content", "")
 
         context_chunks.append(
@@ -83,33 +65,5 @@ async def search(request: QueryRequest):
             )
         )
 
-    if not context_chunks:
-        return QueryResponse(
-            answer="I am sorry, but I cannot confidently deduce an answer based on the verified technical documentation provided.",
-            context_chunks=[]
-        )
-
-    context_blocks = []
-    for chunk in context_chunks:
-        block = f"<context_content source='{chunk.source_document}'>\n{chunk.text_content}\n</context_content>"
-        context_blocks.append(block)
-
-    joined_context = "\n\n".join(context_blocks)
-
-    system_prompt = (
-        "You are an elite Technical Support Copilot. Answer the user query using ONLY the verified context text pieces provided below. "
-        "If the answer cannot be confidently deduced from the context, respond with your exact fallback text pattern.\n\n"
-        f"Context:\n{joined_context}\n\n"
-        f"User Query: {request.user_query}"
-    )
-
-    try:
-        response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=system_prompt
-        )
-        answer = response.text
-    except Exception as e:
-        answer = f"[LLM INVOCATION EXCEPTION ERROR]: {str(e)}"
-
+    answer = f"Retrieved {len(context_chunks)} relevant context chunks for: {request.user_query}"
     return QueryResponse(answer=answer, context_chunks=context_chunks)
