@@ -7,6 +7,37 @@ ENV/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# VS Code
+.vscode/
+
+# Qdrant local storage
+qdrant_data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Environment variables
+.env
+
+# Hugging Face cache (if stored locally)
+.cache/
 *.so
 .Python
 
