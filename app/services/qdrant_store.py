@@ -4,8 +4,14 @@ from qdrant_client.models import VectorParams
 
 COLLECTION_NAME = "enterprise_docs"
 
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+QDRANT_PATH = BASE_DIR / "qdrant_data"
+
 client = QdrantClient(
-    path="./qdrant_data"
+    path=str(QDRANT_PATH)
 )
 
 import atexit
