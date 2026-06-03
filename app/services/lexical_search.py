@@ -1,44 +1,79 @@
-def keyword_search(query):
+import os
+import json
+import psycopg2
+from psycopg2 import pool
+
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_NAME = os.environ.get("DB_NAME", "rag_assistant")
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+
+_connection_pool = None
+
+try:
+    _connection_pool = psycopg2.pool.SimpleConnectionPool(
+        1, 20,
+        host=DB_HOST,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        connect_timeout=5
+    )
+except Exception:
+    _connection_pool = None
+
+
+def keyword_search(query: str, top_n: int = 20) -> list:
     """
-    Performs keyword-based lexical search on a document corpus.
-    Returns a list of results with chunk_id, text_content, and metadata.
+    Execute PostgreSQL Full-Text Search on technical_chunks table.
+    Returns list of dictionaries with chunk_id, text_content, and metadata.
+    Falls back to empty list if database is unavailable.
     """
-    corpus = {
-        1: {
-            "text": "To fix a 502 Bad Gateway error, check your upstream server status and verify network connectivity.",
-            "source": "troubleshooting_guide.md"
-        },
-        2: {
-            "text": "Container CrashLoopBackOff occurs when your pod fails to start. Check logs with kubectl logs.",
-            "source": "kubernetes_handbook.md"
-        },
-        3: {
-            "text": "A 502 error indicates the gateway received an invalid response. Restart your backend services.",
-            "source": "error_codes.md"
-        },
-        4: {
-            "text": "Kubernetes debugging: inspect pod status and resource limits to resolve CrashLoopBackOff.",
-            "source": "k8s_debugging.md"
-        },
-        5: {
-            "text": "HTTP status codes: 502 Bad Gateway means upstream service unavailable or misconfigured.",
-            "source": "http_reference.md"
-        }
-    }
+    if not _connection_pool:
+        return []
 
-    keywords = query.lower().split()
-    results = []
+    try:
+        connection = _connection_pool.getconn()
+        cursor = connection.cursor()
 
-    for chunk_id, doc in corpus.items():
-        text_lower = doc["text"].lower()
-        match_count = sum(1 for kw in keywords if kw in text_lower)
+        sql = """
+        SELECT
+            chunk_id,
+            text_content,
+            COALESCE(metadata, '{}'::jsonb) as metadata
+        FROM technical_chunks
+        WHERE text_tsv @@ plainto_tsquery('english', %s)
+        ORDER BY
+            ts_rank(text_tsv, plainto_tsquery('english', %s)) DESC
+        LIMIT %s;
+        """
 
-        if match_count > 0:
+        cursor.execute(sql, (query, query, top_n))
+        rows = cursor.fetchall()
+        cursor.close()
+        _connection_pool.putconn(connection)
+
+        results = []
+        for row in rows:
+            chunk_id, text_content, metadata_obj = row
+
+            if isinstance(metadata_obj, dict):
+                metadata_dict = metadata_obj
+            elif isinstance(metadata_obj, str):
+                try:
+                    metadata_dict = json.loads(metadata_obj)
+                except json.JSONDecodeError:
+                    metadata_dict = {}
+            else:
+                metadata_dict = {}
+
             results.append({
                 "chunk_id": chunk_id,
-                "text_content": doc["text"],
-                "metadata": {"source": doc["source"], "relevance_score": match_count / len(keywords)}
+                "text_content": text_content,
+                "metadata": metadata_dict
             })
 
-    results.sort(key=lambda x: x["metadata"]["relevance_score"], reverse=True)
-    return results
+        return results
+
+    except Exception as e:
+        return []
