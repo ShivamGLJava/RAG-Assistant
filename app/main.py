@@ -2,7 +2,12 @@ from fastapi import FastAPI, HTTPException
 from app.models.schemas import QueryRequest, QueryResponse, Citation
 from app.services.hybrid_engine import HybridEngine
 from app.services.generation import GenerationService
-import random # Mock for vector generation
+from dotenv import load_dotenv
+import random 
+import os
+
+# Load credentials from .env for security
+load_dotenv()
 
 app = FastAPI(
     title="Enterprise RAG Assistant - Advanced Implementation",
