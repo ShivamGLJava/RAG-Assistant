@@ -1,35 +1,54 @@
-from fastapi import FastAPI
-from app.models.schemas import QueryRequest, QueryResponse
+from fastapi import FastAPI, HTTPException
+from app.models.schemas import QueryRequest, QueryResponse, Citation
+from app.services.hybrid_engine import HybridEngine
+from app.services.generation import GenerationService
+import random # Mock for vector generation
 
 app = FastAPI(
-    title="Enterprise RAG Assistant",
-    description="A production-ready RAG system for internal technical support.",
-    version="1.0.0"
+    title="Enterprise RAG Assistant - Advanced Implementation",
+    description="Engine-layer development focusing on Hybrid Search and Hallucination Guardrails.",
+    version="1.1.0"
 )
+
+# Initialize Services
+hybrid_engine = HybridEngine()
+generation_service = GenerationService()
 
 @app.get("/health", tags=["System"])
 async def health_check():
-    """
-    Check the health of the API service.
-    """
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "message": "FastAPI server is running and reachable."
-    }
+    return {"status": "healthy", "engine": "Advanced RAG", "version": "1.1.0"}
 
 @app.post("/api/v1/chat", response_model=QueryResponse, tags=["RAG"])
 async def chat_endpoint(request: QueryRequest):
     """
-    The main RAG endpoint. 
-    Integration point for Engineer 5 (Orchestration).
+    Advanced RAG Orchestration:
+    1. Query Parsing -> 2. Vectorization -> 3. Hybrid Search -> 4. Guarded Generation
     """
-    # TODO: Engineer 5 to integrate hybrid_search and generation logic here
-    return QueryResponse(
-        answer="FastAPI scaffold is ready. RAG orchestration logic pending integration.",
-        citations=[],
-        status="placeholder"
-    )
+    try:
+        # 1. Simulate Vectorization (Engineer 2's part)
+        # In production: query_vector = embedding_model.encode(request.user_query)
+        mock_vector = [random.uniform(-1, 1) for _ in range(384)]
+
+        # 2. Execute Hybrid Search (Vector + Keyword)
+        context_chunks = await hybrid_engine.hybrid_search(
+            query=request.user_query,
+            query_vector=mock_vector,
+            dept_filter=request.metadata_filter
+        )
+
+        # 3. Guarded Generation (Hallucination Control)
+        result = generation_service.generate_answer(
+            query=request.user_query,
+            context_chunks=context_chunks
+        )
+
+        return QueryResponse(
+            answer=result["answer"],
+            citations=[Citation(**c) for c in result["citations"]],
+            status="trusted" if result["trusted"] else "fallback"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
