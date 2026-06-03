@@ -20,6 +20,16 @@ results = semantic_search(
 print("\nSearch Results:\n")
 
 for i, result in enumerate(results, start=1):
-    print(f"{i}. Score: {result['score']:.4f}")
-    print(result["content"][:200])
-    print("-" * 50)
+
+    print(f"\nResult {i}")
+    print(f"Score: {result['score']:.4f}")
+
+    print("\nAnswer:")
+    print(result["content"])
+
+    print(
+        f"\nSource: {result['source_document']} | "
+        f"Chunk: {result['chunk_id']}"
+    )
+
+    print("-" * 80)
