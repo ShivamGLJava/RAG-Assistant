@@ -320,6 +320,7 @@ class QueryOrchestrator:
             citation = Citation(
                 document_name=metadata.get("source_document", "Unknown"),
                 text_snippet=chunk.get("text_content", "")[:200],  # First 200 chars
+                #fix
                 chunk_id=str(chunk.get("chunk_id", "")),
                 relevance_score=chunk.get("rrf_score", 0.0)
             )
@@ -426,3 +427,4 @@ async def process_query(
     """
     orchestrator = QueryOrchestrator(use_mock_rrf=use_mock_rrf)
     return await orchestrator.orchestrate_query(user_query, metadata_filter)
+
