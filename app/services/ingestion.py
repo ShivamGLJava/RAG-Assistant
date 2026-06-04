@@ -118,3 +118,61 @@ class IngestionEngine:
         """Get chunks for specific document and strategy."""
         chunks = self.get_chunks(strategy)
         return [c for c in chunks if doc_name.lower() in c["source_document"].lower()]
+
+    def save_to_qdrant(self):
+        """Save chunks to Qdrant vector database."""
+        try:
+            from .qdrant_store import client, initialize_collection, COLLECTION_NAME
+            from .embedding_model import generate_embedding
+
+            # Initialize collection
+            initialize_collection()
+
+            # Get all chunks (using fixed strategy as primary)
+            all_chunks = self.fixed_chunks
+
+            if not all_chunks:
+                print("❌ No chunks to save!")
+                return
+
+            # Get embeddings for all chunks
+            print(f"\n🔄 Generating embeddings for {len(all_chunks)} chunks...")
+            embeddings = [generate_embedding(c["content"]) for c in all_chunks]
+
+            # Prepare points for Qdrant
+            points = []
+            for idx, (chunk, embedding) in enumerate(zip(all_chunks, embeddings)):
+                points.append({
+                    "id": idx + 1,
+                    "vector": embedding,
+                    "payload": {
+                        "content": chunk["content"],
+                        "source_document": chunk["source_document"],
+                        "department": chunk["department"],
+                        "chunk_id": chunk["chunk_id"],
+                        "strategy": chunk["strategy"]
+                    }
+                })
+
+            # Upsert to Qdrant
+            print(f"📤 Uploading {len(points)} points to Qdrant...")
+            from qdrant_client.models import PointStruct
+
+            qdrant_points = [
+                PointStruct(
+                    id=p["id"],
+                    vector=p["vector"],
+                    payload=p["payload"]
+                )
+                for p in points
+            ]
+
+            client.upsert(
+                collection_name=COLLECTION_NAME,
+                points=qdrant_points
+            )
+
+            print(f"✅ Successfully saved {len(points)} chunks to Qdrant!")
+
+        except Exception as e:
+            print(f"❌ Error saving to Qdrant: {e}")
