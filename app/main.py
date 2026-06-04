@@ -8,6 +8,11 @@ from app.services.rrf_fusion import compute_rrf
 
 _client = None
 
+DOCUMENTS = {
+    "aws": "AWS.pdf",
+    "faqs": "FAQs.pdf"
+}
+
 
 def _get_client():
     """Lazy-load Gemini client only when needed."""
@@ -58,7 +63,7 @@ app.add_middleware(
 async def _fetch_vector_search_results(query: str) -> list:
     """
     Fetch dense vector search results from cloud infrastructure context.
-    Grounded by configurations and extracted text blocks from source PDFs.
+    Grounded by text blocks extracted from AWS.pdf and FAQs.pdf.
     """
     return [
         {
@@ -117,14 +122,19 @@ async def health_check():
 
 @app.get("/api/v1/status", tags=["System"])
 async def pipeline_status():
-    """Returns the current status of RAG pipeline components."""
+    """Returns the current status of RAG pipeline components and configured data sources."""
     return {
+        "status": "operational",
         "engineer_1_ingestion": "integrated",
         "engineer_2_qdrant": "placeholder_ready",
         "engineer_3_fastapi": "ready",
         "engineer_4_hybrid_search": "production",
-        "data_sources": ["FAQs.pdf", "AWS.pdf"],
-        "retrieval_strategy": "hybrid_lexical_dense_rrf"
+        "data_sources": DOCUMENTS,
+        "retrieval_strategy": "hybrid_lexical_dense_rrf",
+        "rrf_config": {
+            "smoothing_constant": 60,
+            "top_n_candidates": 3
+        }
     }
 
 
@@ -134,17 +144,14 @@ async def search(request: QueryRequest):
     Core hybrid retrieval and answer generation orchestration.
     Integrates parallel lexical and dense retrieval tracks with RRF fusion.
     """
-    # 1. Gather Candidate Vector Streams
     dense_results = await _fetch_vector_search_results(request.user_query)
 
-    # 2. Hallucination Control Firewall: Short-Circuit Immediately if Empty
     if not dense_results:
         return QueryResponse(
             answer="I am sorry, but I cannot confidently deduce an answer based on the verified technical documentation provided.",
             context_chunks=[]
         )
 
-    # 3. Parallel Lexical Search and Algorithmic Fusion
     sparse_results = keyword_search(request.user_query)
     fused_results = compute_rrf(dense_results, sparse_results, k=60, top_n=3)
 
@@ -166,7 +173,6 @@ async def search(request: QueryRequest):
             )
         )
 
-    # 4. Generate Grounded System Context Prompts
     context_blocks = []
     for chunk in context_chunks:
         block = f"<context_content source='{chunk.source_document}'>\n{chunk.text_content}\n</context_content>"
@@ -181,7 +187,6 @@ async def search(request: QueryRequest):
         f"User Query: {request.user_query}"
     )
 
-    # 5. Invoke Google GenAI Core safely
     try:
         client = _get_client()
         response = await client.aio.models.generate_content(
