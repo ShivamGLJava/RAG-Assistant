@@ -157,7 +157,7 @@ class QueryOrchestrator:
         dense_results = []
         try:
             from app.services.vector_search import semantic_search
-            dense_results = semantic_search(query, top_n=10)
+            dense_results = semantic_search(query, limit=10)
         except ImportError:
             print(f"[ORCHESTRATION] Warning: Vector search dependencies not available, skipping dense search")
         except Exception as e:
