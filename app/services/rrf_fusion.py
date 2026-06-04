@@ -39,8 +39,8 @@ def compute_rrf(dense_results, sparse_results, k=10, top_n=3):
             "Rank": rank,
             "Chunk ID": chunk_id,
             "Calculated RRF Score": round(item["score"], 4),
-            "Source Document Name": item["data"]["metadata"].get("source", "unknown"),
-            "text_content": item["data"]["text_content"]
+            "Source Document Name": item["data"].get("metadata", {}).get("source_document", item["data"].get("source_document", "unknown")),
+            "text_content": item["data"].get("text_content", item["data"].get("content", ""))
         })
 
     return fused_candidates
