@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.services.lexical_search import keyword_search
 from app.services.rrf_fusion import compute_rrf
+from app.services.grounding import HallucinationFirewall
+from app.services.orchestration import process_query
 
 _client = None
 
@@ -143,61 +145,26 @@ async def search(request: QueryRequest):
     """
     Core hybrid retrieval and answer generation orchestration.
     Integrates parallel lexical and dense retrieval tracks with RRF fusion.
+    Applies hallucination firewall before calling LLM.
     """
-    dense_results = await _fetch_vector_search_results(request.user_query)
+    # Use the QueryOrchestrator to handle the full pipeline
+    response = await process_query(request.user_query)
 
-    if not dense_results:
-        return QueryResponse(
-            answer="I am sorry, but I cannot confidently deduce an answer based on the verified technical documentation provided.",
-            context_chunks=[]
-        )
-
-    sparse_results = keyword_search(request.user_query)
-    fused_results = compute_rrf(dense_results, sparse_results, k=60, top_n=3)
-
+    # Convert Citation objects to ContextChunk for response
     context_chunks = []
-    for rank, result in enumerate(fused_results, start=1):
-        c_id = str(result.get("chunk_id", result.get("Chunk ID", "N/A")))
-        score = float(result.get("rrf_score", result.get("Calculated RRF Score", 0.0)))
-        meta = result.get("metadata", {})
-        doc_name = meta.get("source_document", meta.get("source", "Unknown"))
-        text = result.get("text_content", "")
-
-        context_chunks.append(
-            ContextChunk(
-                rank=rank,
-                chunk_id=c_id,
-                rrf_score=score,
-                source_document=doc_name,
-                text_content=text
+    if response.citations:
+        for rank, citation in enumerate(response.citations, start=1):
+            context_chunks.append(
+                ContextChunk(
+                    rank=rank,
+                    chunk_id=citation.chunk_id,
+                    rrf_score=citation.relevance_score,
+                    source_document=citation.document_name,
+                    text_content=citation.text_snippet
+                )
             )
-        )
 
-    context_blocks = []
-    for chunk in context_chunks:
-        block = f"<context_content source='{chunk.source_document}'>\n{chunk.text_content}\n</context_content>"
-        context_blocks.append(block)
-
-    joined_context = "\n\n".join(context_blocks)
-
-    system_prompt = (
-        "You are an elite Cloud Infrastructure Auditing Specialist. Answer the user query using ONLY the verified context text pieces provided below. "
-        "If the answer cannot be confidently deduced from the context, respond with your exact fallback text pattern.\n\n"
-        f"Context:\n{joined_context}\n\n"
-        f"User Query: {request.user_query}"
-    )
-
-    try:
-        client = _get_client()
-        response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=system_prompt
-        )
-        answer = response.text
-    except Exception as e:
-        answer = f"[LLM INVOCATION EXCEPTION ERROR]: {str(e)}"
-
-    return QueryResponse(answer=answer, context_chunks=context_chunks)
+    return QueryResponse(answer=response.answer, context_chunks=context_chunks)
 
 
 if __name__ == "__main__":

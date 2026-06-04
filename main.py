@@ -1,7 +1,7 @@
 """Main entry point for RAG Document Ingestion Pipeline and Application Server"""
 
 import sys
-from app.services.ingestion_engine import IngestionEngine
+from app.services.ingestion import IngestionEngine
 
 
 def run_ingestion():
@@ -27,8 +27,14 @@ def run_ingestion():
         print(f"  {doc_name.upper()}: {len(chunks)} chunks")
     print(f"  TOTAL: {semantic_total} chunks")
 
-    print(f"\n✅ Both strategies ready for Engineer 2 (Qdrant Vector Storage)")
-    print(f"📝 Chunks will be compared using RAGAS metrics in later stages")
+    # Save to Qdrant
+    print("\n" + "=" * 70)
+    print("💾 SAVING TO QDRANT")
+    print("=" * 70)
+    engine.save_to_qdrant()
+
+    print(f"\n✅ Ingestion and indexing complete!")
+    print(f"📝 You can now query the system via the FastAPI server")
 
 
 if __name__ == "__main__":

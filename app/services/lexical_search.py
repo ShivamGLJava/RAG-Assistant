@@ -1,7 +1,5 @@
 import os
 import json
-import psycopg2
-from psycopg2 import pool
 
 DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_NAME = os.environ.get("DB_NAME", "rag_assistant")
@@ -11,6 +9,8 @@ DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 _connection_pool = None
 
 try:
+    import psycopg2
+    from psycopg2 import pool
     _connection_pool = psycopg2.pool.SimpleConnectionPool(
         1, 20,
         host=DB_HOST,
