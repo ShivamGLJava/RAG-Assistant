@@ -107,7 +107,7 @@ function ChatInterface() {
           role: 'assistant',
           content: `❌ Error: Unable to process query. ${error.message}. ${
             !useMockData
-              ? 'Make sure the backend server is running on http://127.0.0.1:8001'
+              ? 'Make sure the backend server is running on http://localhost:8000'
               : ''
           }`,
           error: true,
