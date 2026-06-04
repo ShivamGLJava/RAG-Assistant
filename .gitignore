@@ -13,3 +13,7 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Qdrant vector database
+qdrant_data/
+*.lock
