@@ -1,1 +1,0 @@
-"""RAG Assistant Application Package"""
