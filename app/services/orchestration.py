@@ -4,12 +4,27 @@ Main pipeline orchestrator that connects:
   RRF Results → Hallucination Firewall → LLM → Response Formatter
 """
 
+import os
 from typing import List, Dict, Any, Optional
 from app.models.schemas import QueryResponse, Citation
 from app.services.grounding import HallucinationFirewall
-from app.services.hf_llm_integration import HuggingFaceLLM
 from app.services.rrf_fusion import compute_rrf
 from app.services.lexical_search import keyword_search
+
+
+_client = None
+
+
+def _get_client():
+    """Lazy-load Gemini client only when needed."""
+    global _client
+    if _client is None:
+        from google import genai
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY environment variable is not set or is empty")
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 
 class QueryOrchestrator:
@@ -71,9 +86,32 @@ class QueryOrchestrator:
             top_score = rrf_results[0].get("rrf_score", 0.0)
             print(f"[ORCHESTRATION] Hallucination firewall ALLOWED answer (score: {top_score:.2f})")
 
-            # Step 3: Build context and call Hugging Face LLM
-            context = HuggingFaceLLM.build_context(top_chunks)
-            answer = HuggingFaceLLM.query(user_query, context)
+            # Step 3: Build context and call Gemini LLM
+            context_blocks = []
+            for chunk in top_chunks:
+                block = f"<context_content source='{chunk.get('metadata', {}).get('source_document', 'Unknown')}'>\n{chunk.get('text_content', '')}\n</context_content>"
+                context_blocks.append(block)
+
+            joined_context = "\n\n".join(context_blocks)
+
+            system_prompt = (
+                "You are an elite Cloud Infrastructure Auditing Specialist. Answer the user query using ONLY the verified context text pieces provided below. "
+                "If the answer cannot be confidently deduced from the context, respond with your exact fallback text pattern.\n\n"
+                f"Context:\n{joined_context}\n\n"
+                f"User Query: {user_query}"
+            )
+
+            try:
+                client = _get_client()
+                response = await client.aio.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=system_prompt
+                )
+                answer = response.text
+            except Exception as e:
+                answer = f"[LLM INVOCATION EXCEPTION ERROR]: {str(e)}"
+                print(f"[ORCHESTRATION] LLM error: {str(e)}")
+                return self._create_llm_error_response()
 
             if not answer:
                 print("[ORCHESTRATION] LLM failed to generate answer")
@@ -115,31 +153,26 @@ class QueryOrchestrator:
         # Get sparse results from PostgreSQL Full-Text Search (Engineer 4)
         sparse_results = keyword_search(query, top_n=10)
 
-        # TODO: Get dense results from Qdrant (Engineer 2)
-        # For now, using mock dense results
-        dense_results = [
-            {
-                "chunk_id": "doc_002_chk_3",
-                "text_content": "Container CrashLoopBackOff occurs when your pod fails to start. Check logs with kubectl logs.",
-                "metadata": {"source_document": "kubernetes_handbook.md", "source": "kubernetes_handbook.md"}
-            },
-            {
-                "chunk_id": "doc_004_chk_1",
-                "text_content": "Kubernetes debugging: inspect pod status and resource limits to resolve CrashLoopBackOff.",
-                "metadata": {"source_document": "k8s_debugging.md", "source": "k8s_debugging.md"}
-            },
-            {
-                "chunk_id": "doc_001_chk_1",
-                "text_content": "To fix a 502 Bad Gateway error, check your upstream server status and verify network connectivity.",
-                "metadata": {"source_document": "troubleshooting_guide.md", "source": "troubleshooting_guide.md"}
-            }
-        ]
+        # Get dense results from Qdrant Vector Database (Engineer 2)
+        dense_results = []
+        try:
+            from app.services.vector_search import semantic_search
+            dense_results = semantic_search(query, top_n=10)
+        except ImportError:
+            print(f"[ORCHESTRATION] Warning: Vector search dependencies not available, skipping dense search")
+        except Exception as e:
+            print(f"[ORCHESTRATION] Warning: Vector search failed ({str(e)}), using keyword search only")
+            dense_results = []
 
         # Use Engineer 4's RRF to combine and rank results
-        # If sparse_results empty (PostgreSQL unavailable), use mock sparse results
+        # If sparse_results empty (PostgreSQL unavailable), use dense results
         if not sparse_results:
-            sparse_results = dense_results.copy()
-        results = compute_rrf(dense_results, sparse_results, k=10, top_n=10)
+            sparse_results = dense_results.copy() if dense_results else []
+
+        if not dense_results and not sparse_results:
+            return []
+
+        results = compute_rrf(dense_results, sparse_results, k=60, top_n=3)
 
         # Convert Engineer 4's format to our expected format
         converted_results = []
@@ -148,8 +181,8 @@ class QueryOrchestrator:
                 "chunk_id": result.get("Chunk ID", result.get("chunk_id", "")),
                 "text_content": result.get("text_content", ""),
                 "metadata": {
-                    "source_document": result.get("Source Document Name", "Unknown"),
-                    "source": result.get("Source Document Name", "Unknown")
+                    "source_document": result.get("Source Document Name", result.get("source_document", "Unknown")),
+                    "source": result.get("Source Document Name", result.get("source_document", "Unknown"))
                 },
                 "rrf_score": result.get("Calculated RRF Score", result.get("rrf_score", 0.0))
             }
@@ -226,11 +259,10 @@ class QueryOrchestrator:
         )
 
 
-# Convenience function for endpoint
 async def process_query(
     user_query: str,
     metadata_filter: Optional[str] = None,
-    use_mock_rrf: bool = True
+    use_mock_rrf: bool = False
 ) -> QueryResponse:
     """
     Process a user query through the full RAG pipeline.
@@ -238,7 +270,7 @@ async def process_query(
     Args:
         user_query: User's question
         metadata_filter: Optional metadata filter
-        use_mock_rrf: Use mock RRF for testing
+        use_mock_rrf: Use mock RRF for testing (default: False)
 
     Returns:
         QueryResponse with answer and citations
