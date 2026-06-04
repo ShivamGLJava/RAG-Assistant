@@ -18,13 +18,13 @@ function MessageList({ messages }) {
     return (
       <div className="message-list empty">
         <div className="empty-state">
-          <div className="empty-icon">🔍</div>
-          <h2>Technical Support Assistant</h2>
-          <p>Ask me about technical issues like:</p>
+          <div className="empty-icon">☁️</div>
+          <h2>Cloud Infrastructure Assistant</h2>
+          <p>Ask me about AWS and cloud services:</p>
           <ul>
-            <li>How do I troubleshoot a CrashLoopBackOff error?</li>
-            <li>What causes a 502 Bad Gateway issue?</li>
-            <li>How can I resolve an ImagePullBackOff error?</li>
+            <li>What is AWS?</li>
+            <li>What are the main components of AWS?</li>
+            <li>What is the default storage class in Amazon S3?</li>
           </ul>
         </div>
       </div>
