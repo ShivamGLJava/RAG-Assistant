@@ -320,7 +320,7 @@ class QueryOrchestrator:
             citation = Citation(
                 document_name=metadata.get("source_document", "Unknown"),
                 text_snippet=chunk.get("text_content", "")[:200],  # First 200 chars
-                chunk_id=chunk.get("chunk_id", ""),
+                chunk_id=str(chunk.get("chunk_id", "")),
                 relevance_score=chunk.get("rrf_score", 0.0)
             )
             citations.append(citation)
