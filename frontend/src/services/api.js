@@ -108,14 +108,14 @@ const api = {
 
     // Mock knowledge base
     const mockResponses = {
-      'crashloopbackoff':
-        'Container CrashLoopBackOff occurs when your pod fails to start repeatedly. This typically indicates an issue with your container configuration. Check your pod logs with `kubectl logs <pod-name>` to see the actual error. Common causes include: incorrect image name, missing environment variables, or resource constraints. Verify your pod resource limits match your application requirements.',
-      '502':
-        'A 502 Bad Gateway error indicates your upstream server is unavailable or misconfigured. Check that your backend services are running and accessible. Verify network connectivity between your load balancer and backend servers. Check server logs for errors. Ensure DNS resolution is working correctly. You may need to restart services or check firewall rules.',
-      'imagepullbackoff':
-        'ImagePullBackOff error means Kubernetes cannot pull your container image. This usually happens when the image doesn\'t exist, the registry is unavailable, or authentication fails. Verify the image name and tag are correct. Check that the image registry is accessible. If using a private registry, ensure your imagePullSecret is properly configured. Check the event logs with `kubectl describe pod <pod-name>`.',
+      'aws':
+        'Amazon Web Services (AWS) is a comprehensive, evolving cloud computing platform provided by Amazon that includes a mixture of infrastructure as a service (IaaS), platform as a service (PaaS), and packaged software as a service (SaaS) offerings. AWS serves as a reliable, scalable, and cost-effective platform for individuals, start-ups, and enterprises.',
+      'components':
+        'The main components of AWS include: (1) Compute Services - EC2 (Elastic Compute Cloud), Lambda, Auto Scaling; (2) Storage Services - S3 (Simple Storage Service), EBS (Elastic Block Store), Glacier; (3) Database Services - RDS, DynamoDB; (4) Networking - VPC (Virtual Private Cloud), CloudFront, Route 53; (5) Application Services - SNS, SQS, SES; (6) Developer Tools - AWS CloudFormation, AWS CodeDeploy.',
+      's3':
+        'Amazon S3 (Simple Storage Service) is object storage with a simple web service interface to store and retrieve any amount of data from anywhere on the web. The default storage class in Amazon S3 is STANDARD, which provides high durability, availability, and performance object storage for general-purpose use.',
       'default':
-        'I found information about technical troubleshooting. To get more specific help, try asking about: CrashLoopBackOff, 502 errors, or ImagePullBackOff issues.',
+        'I found information about AWS and cloud services. To get more specific help, try asking about: What is AWS, main components of AWS, or storage classes in S3.',
     };
 
     // Match user query to mock response
@@ -131,18 +131,18 @@ const api = {
       answer,
       sources: [
         {
-          document: 'kubernetes_handbook.md',
-          chunk_id: 'doc_002_chk_3',
+          document: 'AWS.pdf',
+          chunk_id: 'aws_001',
           relevance_score: scores[0],
         },
         {
-          document: 'troubleshooting_guide.md',
-          chunk_id: 'doc_001_chk_1',
+          document: 'AWS.pdf',
+          chunk_id: 'aws_002',
           relevance_score: scores[1],
         },
         {
-          document: 'k8s_debugging.md',
-          chunk_id: 'doc_004_chk_1',
+          document: 'FAQs.pdf',
+          chunk_id: 'faq_001',
           relevance_score: scores[2],
         },
       ],
