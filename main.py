@@ -1,7 +1,7 @@
 """Main entry point for RAG Document Ingestion Pipeline and Application Server"""
 
 import sys
-from app.services.ingestion_engine import IngestionEngine
+from app.services.ingestion import IngestionEngine
 
 
 def run_ingestion():

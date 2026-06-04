@@ -18,17 +18,21 @@ function ChatInterface() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
+        console.log('[Chat] Checking backend...');
         await api.health();
+        console.log('[Chat] Backend is ready!');
         setBackendReady(true);
         setUseMockData(false);
       } catch (error) {
-        console.warn('Backend not available, using mock data:', error);
+        console.warn('[Chat] Backend not available, using mock data:', error.message);
         setBackendReady(false);
         setUseMockData(true);
       }
     };
 
-    checkBackend();
+    // Wait a moment for backend to be ready, then check
+    const timeout = setTimeout(checkBackend, 500);
+    return () => clearTimeout(timeout);
   }, []);
 
   const handleSendQuery = async (userQuery) => {

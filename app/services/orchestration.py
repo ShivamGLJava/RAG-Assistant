@@ -5,6 +5,7 @@ Main pipeline orchestrator that connects:
 """
 
 import os
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from app.models.schemas import QueryResponse, Citation
 from app.services.grounding import HallucinationFirewall
@@ -13,6 +14,79 @@ from app.services.lexical_search import keyword_search
 
 
 _client = None
+_loaded_documents = None  # Cache for loaded PDF documents
+
+
+def _load_real_documents() -> List[Dict[str, Any]]:
+    """
+    Load and chunk real documents from AWS.pdf and FAQs.pdf.
+    Used as fallback when Engineer 1's database isn't ready.
+    """
+    global _loaded_documents
+    if _loaded_documents is not None:
+        return _loaded_documents
+
+    chunks = []
+
+    # Try to load PDFs using pymupdf
+    try:
+        import pymupdf
+        base_path = Path(__file__).parent.parent.parent
+
+        pdf_files = {
+            "AWS.pdf": "AWS.pdf",
+            "FAQs.pdf": "FAQs.pdf"
+        }
+
+        for doc_name, pdf_file in pdf_files.items():
+            pdf_path = base_path / pdf_file
+            if pdf_path.exists():
+                try:
+                    doc = pymupdf.open(pdf_path)
+                    chunk_id_counter = 0
+                    for page_num, page in enumerate(doc):
+                        text = page.get_text()
+                        # Split page into smaller chunks (roughly 500 chars each)
+                        lines = text.split("\n")
+                        current_chunk = ""
+                        for line in lines:
+                            current_chunk += line + "\n"
+                            if len(current_chunk) > 500:
+                                chunk_text = current_chunk.strip()
+                                if chunk_text:
+                                    chunks.append({
+                                        "chunk_id": f"{doc_name.replace('.pdf', '')}_{page_num}_{chunk_id_counter}",
+                                        "text_content": chunk_text[:1000],  # Max 1000 chars
+                                        "metadata": {
+                                            "source_document": doc_name,
+                                            "page": page_num + 1,
+                                            "section": "Content"
+                                        }
+                                    })
+                                    chunk_id_counter += 1
+                                current_chunk = ""
+
+                        # Add remaining content
+                        chunk_text = current_chunk.strip()
+                        if chunk_text:
+                            chunks.append({
+                                "chunk_id": f"{doc_name.replace('.pdf', '')}_{page_num}_{chunk_id_counter}",
+                                "text_content": chunk_text[:1000],
+                                "metadata": {
+                                    "source_document": doc_name,
+                                    "page": page_num + 1,
+                                    "section": "Content"
+                                }
+                            })
+                    doc.close()
+                    print(f"[ORCHESTRATION] Loaded {len([c for c in chunks if doc_name in c['metadata']['source_document']])} chunks from {doc_name}")
+                except Exception as e:
+                    print(f"[ORCHESTRATION] Failed to load {pdf_path}: {str(e)}")
+    except ImportError:
+        print("[ORCHESTRATION] pymupdf not available, using mock data")
+
+    _loaded_documents = chunks if chunks else None
+    return _loaded_documents
 
 
 def _get_client():
@@ -138,6 +212,28 @@ class QueryOrchestrator:
             print(f"[ERROR] Orchestration failed: {str(e)}")
             return self._create_error_response(str(e))
 
+    def _simple_text_search(self, query: str, chunks: List[Dict], top_n: int = 10) -> List[Dict]:
+        """
+        Simple keyword matching on loaded PDF chunks.
+        Returns chunks that contain query terms, ranked by match count.
+        """
+        if not chunks:
+            return []
+
+        query_terms = query.lower().split()
+        scored_chunks = []
+
+        for chunk in chunks:
+            text = chunk.get("text_content", "").lower()
+            # Count how many query terms appear in this chunk
+            match_count = sum(1 for term in query_terms if term in text)
+            if match_count > 0:
+                scored_chunks.append((chunk, match_count))
+
+        # Sort by match count descending, return top_n
+        scored_chunks.sort(key=lambda x: x[1], reverse=True)
+        return [chunk for chunk, score in scored_chunks[:top_n]]
+
     def _get_search_results(
         self,
         query: str,
@@ -155,6 +251,14 @@ class QueryOrchestrator:
         """
         # Get sparse results from PostgreSQL Full-Text Search (Engineer 4)
         sparse_results = keyword_search(query, top_n=10)
+
+        # If PostgreSQL unavailable, try simple text search on loaded PDFs
+        if not sparse_results:
+            loaded_docs = _load_real_documents()
+            if loaded_docs:
+                sparse_results = self._simple_text_search(query, loaded_docs, top_n=10)
+                if sparse_results:
+                    print(f"[ORCHESTRATION] Found {len(sparse_results)} results via simple text search")
 
         # Get dense results from Qdrant Vector Database (Engineer 2)
         dense_results = []
@@ -248,7 +352,7 @@ class QueryOrchestrator:
     def _create_llm_error_response(self) -> QueryResponse:
         """Create response when LLM fails."""
         return QueryResponse(
-            answer="Error: Unable to generate answer. Please check that HF_API_TOKEN environment variable is set and Hugging Face API is accessible.",
+            answer="Error: Unable to generate answer. Please check that GEMINI_API_KEY environment variable is set and Google Gemini API is accessible.",
             citations=[],
             status="error",
             confidence_score=0.0
@@ -265,9 +369,14 @@ class QueryOrchestrator:
 
     def _get_mock_fallback_data(self) -> List[Dict[str, Any]]:
         """
-        Return mock cloud infrastructure data for testing when real data sources are unavailable.
-        Used when Engineer 1's ingestion and Engineer 2's vector search aren't ready.
+        Try to load real PDF content first, fall back to mock data if unavailable.
         """
+        # Try real PDFs first
+        real_chunks = _load_real_documents()
+        if real_chunks and len(real_chunks) > 0:
+            return real_chunks[:10]  # Return top 10 chunks
+
+        # Fallback to mock data
         return [
             {
                 "chunk_id": "faq_001_seven_rs",
