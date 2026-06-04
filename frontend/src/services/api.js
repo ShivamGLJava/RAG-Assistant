@@ -3,7 +3,7 @@
  * Handles all backend communication with Engineer 5 RAG backend
  */
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
 
 const api = {
   /**
@@ -14,6 +14,7 @@ const api = {
    */
   query: async (userQuery, metadataFilter = null) => {
     try {
+      console.log(`[API] Calling ${API_BASE}/api/v1/search`);
       const response = await fetch(`${API_BASE}/api/v1/search`, {
         method: 'POST',
         headers: {
@@ -25,11 +26,17 @@ const api = {
         }),
       });
 
+      console.log(`[API] Response status: ${response.status}`);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[API] Error response: ${errorText}`);
         throw new Error(`API error: ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log(`[API] Data received:`, data);
+
       // Convert backend format (context_chunks) to frontend format (sources)
       return {
         answer: data.answer,
@@ -43,26 +50,50 @@ const api = {
         confidence_score: 0.85,
       };
     } catch (error) {
-      console.error('Query failed:', error);
+      console.error(`[API] Query failed:`, error.message);
       throw error;
     }
   },
 
   /**
-   * Health check endpoint
+   * Health check endpoint with retry
    * @returns {Promise<{status: string}>}
    */
   health: async () => {
-    try {
-      const response = await fetch(`${API_BASE}/health`);
-      if (!response.ok) {
-        throw new Error('Health check failed');
+    const maxRetries = 3;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[API] Health check attempt ${attempt}/${maxRetries}: ${API_BASE}/health`);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(`${API_BASE}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        console.log(`[API] Health check status: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`Health check failed: ${response.statusText}`);
+        }
+        const data = await response.json();
+        console.log(`[API] Health check passed`);
+        return data;
+      } catch (error) {
+        lastError = error;
+        console.error(`[API] Health check attempt ${attempt} failed:`, error.message);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
-      return response.json();
-    } catch (error) {
-      console.error('Health check failed:', error);
-      throw error;
     }
+
+    throw lastError;
   },
 
   /**

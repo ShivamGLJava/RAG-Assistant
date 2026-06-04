@@ -14,8 +14,8 @@ class HallucinationFirewall:
     the LLM only generates answers from retrieved context.
     """
 
-    # Confidence threshold below which we don't call LLM
-    CONFIDENCE_THRESHOLD = 0.1
+    # Confidence threshold below which we don't call LLM (adjusted for k=60 RRF scoring)
+    CONFIDENCE_THRESHOLD = 0.01
 
     # Fallback message when firewall blocks answer
     FALLBACK_ANSWER = (

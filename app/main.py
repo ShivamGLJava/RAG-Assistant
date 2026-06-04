@@ -1,12 +1,19 @@
 import os
 from typing import List
+from pathlib import Path
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from app.services.lexical_search import keyword_search
 from app.services.rrf_fusion import compute_rrf
 from app.services.grounding import HallucinationFirewall
 from app.services.orchestration import process_query
+
+# Load environment variables from .env file
+env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(env_path)
 
 _client = None
 
@@ -53,13 +60,27 @@ app = FastAPI(
     openapi_url="/api/openapi.json"
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+@app.middleware("http")
+async def cors_middleware(request, call_next):
+    """Manually add CORS headers to all responses."""
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                "Access-Control-Max-Age": "3600",
+            },
+        )
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    return response
 
 
 async def _fetch_vector_search_results(query: str) -> list:
@@ -138,6 +159,12 @@ async def pipeline_status():
             "top_n_candidates": 3
         }
     }
+
+
+@app.options("/api/v1/search")
+async def options_search():
+    """Handle CORS preflight requests."""
+    return {}
 
 
 @app.post("/api/v1/search", response_model=QueryResponse, tags=["RAG"])
