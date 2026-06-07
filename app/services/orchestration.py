@@ -281,7 +281,8 @@ class QueryOrchestrator:
             print(f"[ORCHESTRATION] No real search results found, using mock data for testing")
             sparse_results = self._get_mock_fallback_data()
 
-        results = compute_rrf(dense_results, sparse_results, k=60, top_n=3)
+        results = compute_rrf(dense_results, sparse_results, k=3, top_n=3)
+
 
         # Convert Engineer 4's format to our expected format
         converted_results = []

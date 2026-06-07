@@ -97,7 +97,7 @@ def semantic_search(
                 "source_document": point.payload["source_document"],
                 "department": point.payload["department"],
                 "chunk_id": point.payload["chunk_id"],
-                "chunk_size": point.payload["chunk_size"]
+                "chunk_size": point.payload.get("chunk_size", 0)
             }
         )
 

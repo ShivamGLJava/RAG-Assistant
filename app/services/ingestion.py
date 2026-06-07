@@ -150,6 +150,7 @@ class IngestionEngine:
                         "source_document": chunk["source_document"],
                         "department": chunk["department"],
                         "chunk_id": chunk["chunk_id"],
+                        "chunk_size": chunk["chunk_size"],
                         "strategy": chunk["strategy"]
                     }
                 })

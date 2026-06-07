@@ -13,3 +13,11 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Qdrant local database
+qdrant_data/
+app/services/qdrant_data/
+
+# Python cache
+__pycache__/
+*.pyc
