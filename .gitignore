@@ -13,3 +13,51 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Python Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Environment Configuration
+.env
+.env.local
+.env.*.local
+
+# Build Artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Qdrant Data
+qdrant_data/
+*.lock
