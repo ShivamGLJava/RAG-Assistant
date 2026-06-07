@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0+-green.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)
+![Status](https://img.shields.io/badge/Status-In%20Progress-orange.svg)
 
 ---
 
@@ -242,6 +242,51 @@ Interactive API documentation available at:
 - **Swagger UI**: `http://localhost:8000/api/docs`
 - **ReDoc**: `http://localhost:8000/api/redoc`
 - **OpenAPI Schema**: `http://localhost:8000/api/openapi.json`
+
+---
+
+## 🧪 Evaluation & Metrics
+
+### RAGAS Evaluation Status: ⚠️ IN PROGRESS
+
+Current RAGAS metrics show the system is **functional but requires optimization**:
+
+| Metric | Fixed-Size | Semantic | Target |
+|--------|-----------|----------|--------|
+| Answer Relevancy | 0.752 | 0.541 | >0.85 |
+| Context Relevancy | 0.760 | 0.770 | >0.85 |
+| Context Precision | [varies] | [varies] | >0.80 |
+| Faithfulness | 0.742 | 0.555 | >0.80 |
+| **Overall Score** | **0.813** | **0.717** | **>0.85** |
+
+### Improvement Plan
+
+**Current Issues:**
+- ⚠️ Answer relevancy below target (0.75 vs 0.85 goal)
+- ⚠️ Semantic chunking underperforming relative to fixed-size
+- ⚠️ Faithfulness metric indicates LLM hallucination risk
+- ⚠️ Some interview questions have low context precision
+
+**Optimization Tasks (In Progress):**
+1. ✅ Verify chunk quality and retrieval accuracy
+2. 🔄 Fine-tune chunk sizes (currently 512 chars)
+3. 🔄 Optimize embedding model selection
+4. 🔄 Improve RRF fusion parameters (k=60)
+5. 🔄 Add more training documents for better coverage
+6. 🔄 Implement prompt engineering for better answers
+7. 🔄 Adjust hallucination firewall thresholds
+
+**Run Evaluation:**
+```bash
+# Verify chunks are real and working
+python verify_chunks.py
+
+# Evaluate chunking strategies with RAGAS metrics
+python evaluate_chunking_strategies.py
+
+# Debug specific queries
+python debug_evaluation.py
+```
 
 ---
 

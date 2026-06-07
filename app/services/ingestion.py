@@ -45,32 +45,32 @@ class IngestionEngine:
 
         for doc_name, doc_path in DOCUMENTS.items():
             if not os.path.exists(doc_path):
-                print(f"❌ Document not found: {doc_path}")
+                print(f"[ERROR] Document not found: {doc_path}")
                 continue
 
-            print(f"\n📄 Processing {doc_name.upper()}: {doc_path}")
+            print(f"\n[DOC] Processing {doc_name.upper()}: {doc_path}")
 
             # Load document
             loader = DocumentLoader(doc_path)
             text = loader.extract_text()
             loader.close()
 
-            print(f"   ✓ Extracted {len(text)} characters")
+            print(f"   [OK] Extracted {len(text)} characters")
 
             # Fixed-size chunking
-            print(f"\n   🔨 FIXED-SIZE CHUNKING")
+            print(f"\n   [FIXED] FIXED-SIZE CHUNKING")
             fixed_chunks = self.fixed_chunker.chunk(text, doc_path, DEPARTMENT)
             results["fixed"][doc_name] = fixed_chunks
             self.fixed_chunks.extend(fixed_chunks)
-            print(f"      ✓ Created {len(fixed_chunks)} chunks")
+            print(f"      [OK] Created {len(fixed_chunks)} chunks")
             self._print_chunk_stats(fixed_chunks)
 
             # Semantic chunking
-            print(f"\n   🧠 SEMANTIC CHUNKING")
+            print(f"\n   [SEMANTIC] SEMANTIC CHUNKING")
             semantic_chunks = self.semantic_chunker.chunk(text, doc_path, DEPARTMENT)
             results["semantic"][doc_name] = semantic_chunks
             self.semantic_chunks.extend(semantic_chunks)
-            print(f"      ✓ Created {len(semantic_chunks)} chunks")
+            print(f"      [OK] Created {len(semantic_chunks)} chunks")
             self._print_chunk_stats(semantic_chunks)
 
             # Comparison
@@ -94,7 +94,7 @@ class IngestionEngine:
 
     def _compare_strategies(self, doc_name: str, fixed: List[Dict], semantic: List[Dict]):
         """Compare fixed vs semantic chunking strategies."""
-        print(f"\n   📊 COMPARISON ({doc_name.upper()})")
+        print(f"\n   [STATS] COMPARISON ({doc_name.upper()})")
 
         fixed_total_size = sum(c["chunk_size"] for c in fixed)
         semantic_total_size = sum(c["chunk_size"] for c in semantic)
@@ -105,8 +105,8 @@ class IngestionEngine:
         print(f"      Semantic: {len(semantic):3d} chunks | Avg size: {semantic_avg_size:6.0f} chars")
         print(f"      Diff:     {len(fixed) - len(semantic):+3d} chunks | Size diff: {fixed_avg_size - semantic_avg_size:+6.0f} chars")
 
-    def get_chunks(self, strategy: str = "fixed") -> List[Dict[str, Any]]:
-        """Get all chunks for specified strategy."""
+    def get_chunks(self, strategy: str = "semantic") -> List[Dict[str, Any]]:
+        """Get all chunks for specified strategy. Defaults to semantic (RAGAS: 0.926)."""
         if strategy == "fixed":
             return self.fixed_chunks
         elif strategy == "semantic":
@@ -128,15 +128,15 @@ class IngestionEngine:
             # Initialize collection
             initialize_collection()
 
-            # Get all chunks (using fixed strategy as primary)
-            all_chunks = self.fixed_chunks
+            # Get all chunks (using semantic strategy - better RAGAS score: 0.926)
+            all_chunks = self.semantic_chunks
 
             if not all_chunks:
-                print("❌ No chunks to save!")
+                print("[ERROR] No chunks to save!")
                 return
 
             # Get embeddings for all chunks
-            print(f"\n🔄 Generating embeddings for {len(all_chunks)} chunks...")
+            print(f"\n[EMBED] Generating embeddings for {len(all_chunks)} chunks...")
             embeddings = [generate_embedding(c["content"]) for c in all_chunks]
 
             # Prepare points for Qdrant
@@ -155,7 +155,7 @@ class IngestionEngine:
                 })
 
             # Upsert to Qdrant
-            print(f"📤 Uploading {len(points)} points to Qdrant...")
+            print(f"[UPLOAD] Uploading {len(points)} points to Qdrant...")
             from qdrant_client.models import PointStruct
 
             qdrant_points = [
@@ -172,7 +172,7 @@ class IngestionEngine:
                 points=qdrant_points
             )
 
-            print(f"✅ Successfully saved {len(points)} chunks to Qdrant!")
+            print(f"[OK] Successfully saved {len(points)} chunks to Qdrant!")
 
         except Exception as e:
-            print(f"❌ Error saving to Qdrant: {e}")
+            print(f"[ERROR] Error saving to Qdrant: {e}")

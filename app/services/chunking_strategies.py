@@ -1,9 +1,9 @@
 from typing import List, Dict, Any
 import numpy as np
 from langchain_text_splitters import CharacterTextSplitter
-from sentence_transformers import SentenceTransformer
 import nltk
 from nltk.tokenize import sent_tokenize
+from app.services.embedding_model import generate_embedding
 
 try:
     nltk.data.find('tokenizers/punkt')
@@ -53,12 +53,12 @@ class FixedChunkingStrategy:
 
 
 class SemanticChunkingStrategy:
-    """Semantic chunking based on sentence similarity."""
+    """Semantic chunking based on sentence similarity using HF Inference API."""
 
-    def __init__(self, similarity_threshold: float = 0.5):
+    def __init__(self, similarity_threshold: float = 0.55, max_chunk_size: int = 512):
         self.similarity_threshold = similarity_threshold
-        print("   • Loading SentenceTransformer model (all-MiniLM-L6-v2)...")
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.max_chunk_size = max_chunk_size
+        print("   • Using HF Inference API for embeddings (all-roberta-large-v1)...")
 
     def chunk(self, text: str, source_document: str, department: str) -> List[Dict[str, Any]]:
         """
@@ -88,9 +88,13 @@ class SemanticChunkingStrategy:
                 "strategy": "semantic"
             }]
 
-        # Get embeddings for all sentences
-        print(f"   • Embedding {len(sentences)} sentences with all-MiniLM-L6-v2...")
-        embeddings = self.model.encode(sentences, convert_to_numpy=True)
+        # Get embeddings for all sentences via HF API
+        print(f"   • Embedding {len(sentences)} sentences via HF Inference API...")
+        embeddings = []
+        for sentence in sentences:
+            embedding = generate_embedding(sentence)
+            embeddings.append(embedding)
+        embeddings = np.array(embeddings)
 
         # Calculate similarities between consecutive sentences
         similarities = []
@@ -98,18 +102,29 @@ class SemanticChunkingStrategy:
             sim = self._cosine_similarity(embeddings[i], embeddings[i + 1])
             similarities.append(sim)
 
-        # Group sentences based on similarity threshold
+        # Improved grouping: combine similarity and chunk size constraints
         groups = []
         current_group = [sentences[0]]
+        current_size = len(sentences[0])
 
         for i, similarity in enumerate(similarities):
-            if similarity > self.similarity_threshold:
-                # High similarity: add to current group
-                current_group.append(sentences[i + 1])
+            next_sentence = sentences[i + 1]
+            next_size = len(next_sentence)
+            potential_size = current_size + len(" ") + next_size
+
+            # Keep adding sentences if:
+            # 1. Similarity is high AND
+            # 2. Adding won't exceed max_chunk_size
+            # This ensures semantic coherence while respecting size constraints
+            if similarity > self.similarity_threshold and potential_size <= self.max_chunk_size:
+                current_group.append(next_sentence)
+                current_size = potential_size
             else:
-                # Low similarity: start new group
-                groups.append(" ".join(current_group))
-                current_group = [sentences[i + 1]]
+                # Start new group if similarity is low OR size would be exceeded
+                if current_group:
+                    groups.append(" ".join(current_group))
+                current_group = [next_sentence]
+                current_size = next_size
 
         # Add last group
         if current_group:
