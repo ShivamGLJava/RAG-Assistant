@@ -1,173 +1,158 @@
 name: Security Gate
-
-on:
-  push:
-    branches:
-      - develop
+on:  
+  push:    
+    branches:      
+      - develop      
+      - feat/*  
+  pull_request:    
+    branches:      
+      - develop      
       - feat/*
-  pull_request:
-    branches:
-      - develop
-      - feat/*
 
-jobs:
-  security-scan:
-    name: SAST & Dependency Audit
-    runs-on: ubuntu-latest
+jobs:  
+  security-scan:    
+    name: SAST & Dependency Audit    
+    runs-on: ubuntu-latest    
+    steps:      
+      # ========================================================================      
+      # STEP 1: Checkout repository code      
+      # ========================================================================      
+      - name: Checkout code        
+        uses: actions/checkout@v4        
+        with:          
+          fetch-depth: 0  # Full history for comprehensive scanning      
 
-    steps:
-      # ========================================================================
-      # STEP 1: Checkout repository code
-      # ========================================================================
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Full history for comprehensive scanning
+      # ========================================================================      
+      # STEP 2: Setup Python environment      
+      # ========================================================================      
+      - name: Set up Python 3.11        
+        uses: actions/setup-python@v5  # Upgraded from v4 to v5 for modern runtime stability
+        with:          
+          python-version: '3.11'          
+          cache: 'pip'      
 
-      # ========================================================================
-      # STEP 2: Setup Python environment
-      # ========================================================================
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+      # ========================================================================      
+      # STEP 3: Install project dependencies      
+      # ========================================================================      
+      - name: Install dependencies        
+        run: |          
+          python -m pip install --upgrade pip          
+          pip install -r requirements.txt      
 
-      # ========================================================================
-      # STEP 3: Install project dependencies
-      # ========================================================================
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      # ========================================================================      
+      # STEP 4: Install security scanning tools      
+      # ========================================================================      
+      - name: Install security tools        
+        run: |          
+          pip install bandit pip-audit      
 
-      # ========================================================================
-      # STEP 4: Install security scanning tools
-      # ========================================================================
-      - name: Install security tools
-        run: |
-          pip install bandit pip-audit
+      # ========================================================================      
+      # STEP 5: Run SAST scan with Bandit      
+      # Description: Static Application Security Testing      
+      # Scans Python code for common security issues      
+      # ========================================================================      
+      - name: Run Bandit SAST scan        
+        id: bandit        
+        run: |          
+          echo "Running Bandit SAST scan..."          
+          bandit -r ./app -f json -o bandit-report.json || true          
+          bandit -r ./app -f txt          
+          # Check if critical issues found          
+          if bandit -r ./app -ll -qq; then            
+            echo "✓ SAST: No critical security issues found"          
+          else            
+            echo "✗ SAST: Critical security issues detected"            
+            exit 1          
+          fi      
 
-      # ========================================================================
-      # STEP 5: Run SAST scan with Bandit
-      # Description: Static Application Security Testing
-      # Scans Python code for common security issues:
-      #   - Hardcoded secrets/credentials
-      #   - SQL injection vulnerabilities
-      #   - Insecure deserialization
-      #   - Weak cryptography
-      #   - Insecure file operations
-      # ========================================================================
-      - name: Run Bandit SAST scan
-        id: bandit
-        run: |
-          echo "Running Bandit SAST scan..."
-          bandit -r ./app -f json -o bandit-report.json || true
-          bandit -r ./app -f txt
+      # ========================================================================      
+      # STEP 6: Run dependency audit with pip-audit      
+      # Description: Software Composition Analysis (SCA)      
+      # Checks for: Known CVE vulnerabilities in dependencies      
+      # ========================================================================      
+      - name: Run pip-audit dependency check        
+        id: pip-audit        
+        run: |          
+          echo "Running pip-audit for known vulnerabilities..."          
+          pip-audit -r requirements.txt --format json > pip-audit-report.json || true          
+          pip-audit -r requirements.txt --format text          
+          # Check for vulnerabilities          
+          if pip-audit -r requirements.txt -q; then            
+            echo "✓ SCA: No vulnerable dependencies found"          
+          else            
+            echo "✗ SCA: Vulnerable dependencies detected"            
+            exit 1          
+          fi      
 
-          # Check if critical issues found
-          if bandit -r ./app -ll -qq; then
-            echo "✓ SAST: No critical security issues found"
-          else
-            echo "✗ SAST: Critical security issues detected"
-            exit 1
-          fi
+      # ========================================================================      
+      # STEP 7: Upload security reports as artifacts      
+      # ========================================================================      
+      - name: Upload security reports        
+        if: always()        
+        uses: actions/upload-artifact@v4  # Fixed! Upgraded from v3 to v4 to clear GitHub's deprecation block
+        with:          
+          name: security-reports          
+          path: |            
+            bandit-report.json            
+            pip-audit-report.json          
+          retention-days: 30      
 
-      # ========================================================================
-      # STEP 6: Run dependency audit with pip-audit
-      # Description: Software Composition Analysis (SCA)
-      # Checks for:
-      #   - Known CVE vulnerabilities in dependencies
-      #   - Deprecated package versions
-      #   - Upstream security advisories
-      # ========================================================================
-      - name: Run pip-audit dependency check
-        id: pip-audit
-        run: |
-          echo "Running pip-audit for known vulnerabilities..."
-          pip-audit -r requirements.txt --format json > pip-audit-report.json || true
-          pip-audit -r requirements.txt --format text
+      # ========================================================================      
+      # STEP 8: Comment results on PR      
+      # ========================================================================      
+      - name: Comment security results on PR        
+        if: github.event_name == 'pull_request'        
+        uses: actions/github-script@v7  # Upgraded from v6 to v7 to ensure clean Node execution paths
+        with:          
+          script: |            
+            const fs = require('fs');            
+            let comment = '## Security Gate Results\n\n';            
+            try {              
+              const banditReport = JSON.parse(fs.readFileSync('bandit-report.json', 'utf8'));              
+              const banditMetrics = banditReport.metrics;              
+              comment += `### SAST Scan (Bandit)\n`;              
+              comment += `- **Total Issues**: ${banditMetrics['_totals']['TOTAL']}\n`;              
+              comment += `- **High Severity**: ${banditMetrics['_totals']['HIGH']}\n`;              
+              comment += `- **Medium Severity**: ${banditMetrics['_totals']['MEDIUM']}\n`;              
+              comment += `- **Low Severity**: ${banditMetrics['_totals']['LOW']}\n\n`;            
+            } catch (e) {              
+              comment += `### SAST Scan (Bandit)\n✓ No security issues found\n\n`;            
+            }            
+            try {              
+              const auditReport = JSON.parse(fs.readFileSync('pip-audit-report.json', 'utf8'));              
+              comment += `### Dependency Audit (pip-audit)\n`;              
+              if (auditReport.vulnerabilities.length > 0) {                
+                comment += `⚠️ Found ${auditReport.vulnerabilities.length} vulnerable dependencies\n`;              
+              } else {                
+                comment += `✓ No vulnerable dependencies found\n`;              
+              }            
+            } catch (e) {              
+              comment += `### Dependency Audit (pip-audit)\n✓ No vulnerable dependencies found\n`;            
+            }            
+            github.rest.issues.createComment({              
+              issue_number: context.issue.number,              
+              owner: context.repo.owner,              
+              repo: context.repo.repo,              
+              body: comment            
+            });      
 
-          # Check for vulnerabilities
-          if pip-audit -r requirements.txt -q; then
-            echo "✓ SCA: No vulnerable dependencies found"
-          else
-            echo "✗ SCA: Vulnerable dependencies detected"
-            exit 1
-          fi
+      # ========================================================================      
+      # STEP 9: Fail build if security issues found      
+      # ========================================================================      
+      - name: Enforce security gate        
+        if: failure()        
+        run: |          
+          echo "Security gate failed. Please fix vulnerabilities before proceeding."          
+          exit 1      
 
-      # ========================================================================
-      # STEP 7: Upload security reports as artifacts
-      # ========================================================================
-      - name: Upload security reports
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: security-reports
-          path: |
-            bandit-report.json
-            pip-audit-report.json
-          retention-days: 30
-
-      # ========================================================================
-      # STEP 8: Comment results on PR
-      # ========================================================================
-      - name: Comment security results on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            let comment = '## Security Gate Results\n\n';
-
-            try {
-              const banditReport = JSON.parse(fs.readFileSync('bandit-report.json', 'utf8'));
-              const banditMetrics = banditReport.metrics;
-              comment += `### SAST Scan (Bandit)\n`;
-              comment += `- **Total Issues**: ${banditMetrics['_totals']['TOTAL']}\n`;
-              comment += `- **High Severity**: ${banditMetrics['_totals']['HIGH']}\n`;
-              comment += `- **Medium Severity**: ${banditMetrics['_totals']['MEDIUM']}\n`;
-              comment += `- **Low Severity**: ${banditMetrics['_totals']['LOW']}\n\n`;
-            } catch (e) {
-              comment += `### SAST Scan (Bandit)\n✓ No security issues found\n\n`;
-            }
-
-            try {
-              const auditReport = JSON.parse(fs.readFileSync('pip-audit-report.json', 'utf8'));
-              comment += `### Dependency Audit (pip-audit)\n`;
-              if (auditReport.vulnerabilities.length > 0) {
-                comment += `⚠️ Found ${auditReport.vulnerabilities.length} vulnerable dependencies\n`;
-              } else {
-                comment += `✓ No vulnerable dependencies found\n`;
-              }
-            } catch (e) {
-              comment += `### Dependency Audit (pip-audit)\n✓ No vulnerable dependencies found\n`;
-            }
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      # ========================================================================
-      # STEP 9: Fail build if security issues found
-      # ========================================================================
-      - name: Enforce security gate
-        if: failure()
-        run: |
-          echo "Security gate failed. Please fix vulnerabilities before proceeding."
-          exit 1
-
-      # ========================================================================
-      # STEP 10: Summary
-      # ========================================================================
-      - name: Security gate summary
-        if: always()
-        run: |
-          echo "Security Gate Execution Summary"
-          echo "================================"
-          echo "SAST Scan: ✓ Complete"
-          echo "Dependency Audit: ✓ Complete"
+      # ========================================================================      
+      # STEP 10: Summary      
+      # ========================================================================      
+      - name: Security gate summary        
+        if: always()        
+        run: |          
+          echo "Security Gate Execution Summary"          
+          echo "================================"          
+          echo "SAST Scan: ✓ Complete"          
+          echo "Dependency Audit: ✓ Complete"          
           echo "Artifacts: bandit-report.json, pip-audit-report.json"
