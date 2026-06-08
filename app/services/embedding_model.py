@@ -79,6 +79,7 @@ def generate_embedding(text: str) -> list:
         Embedding vector (768 dimensions from Granite model)
     """
     try:
+        
         embedding = client.feature_extraction(
             text,
             model=EMBEDDING_MODEL
@@ -88,6 +89,10 @@ def generate_embedding(text: str) -> list:
         if hasattr(embedding, 'tolist'):
             embedding = embedding.tolist()
 
+        if isinstance(embedding, list) and len(embedding) > 0:
+            if isinstance(embedding[0], list):
+                embedding = embedding[0]    
+
         if not isinstance(embedding, list) or len(embedding) == 0:
             raise ValueError(f"Unexpected embedding format: {type(embedding)}")
 
@@ -96,6 +101,9 @@ def generate_embedding(text: str) -> list:
     except Exception as e:
         error_msg = f"Embedding generation failed: {type(e).__name__}: {str(e)}"
         print(f"[ERROR] {error_msg}")
+        print(f"[ERROR] Full traceback:")
+        import traceback
+        traceback.print_exc()
         raise RuntimeError(error_msg)
 
 

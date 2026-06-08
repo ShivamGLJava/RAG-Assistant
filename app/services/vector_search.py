@@ -52,7 +52,14 @@ def semantic_search(
     source_document: str = None
 ):
 
+    initialize_collection()
     query_vector = generate_embedding(query)
+    
+    print(f"[VECTOR_SEARCH] Query vector type: {type(query_vector)}")
+    print(f"[VECTOR_SEARCH] Query vector length: {len(query_vector)}")
+    if len(query_vector) > 0:
+        print(f"[VECTOR_SEARCH] First element type: {type(query_vector[0])}")
+        print(f"[VECTOR_SEARCH] First 3 values: {query_vector[:3]}")
 
     conditions = []
 
@@ -79,12 +86,24 @@ def semantic_search(
             must=conditions
         )
 
-    results = client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=query_vector,
-        query_filter=search_filter,
-        limit=limit
-    )
+    print(f"[VECTOR_SEARCH] About to query Qdrant...")
+    print(f"[VECTOR_SEARCH] Collection: {COLLECTION_NAME}")
+    print(f"[VECTOR_SEARCH] Query vector length: {len(query_vector)}")
+    print(f"[VECTOR_SEARCH] Search filter: {search_filter}")
+
+    try:
+        results = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_vector,
+            query_filter=search_filter,
+            limit=limit
+        )
+        print(f"[VECTOR_SEARCH] Qdrant query succeeded! Found {len(results.points)} points")
+    except Exception as e:
+        print(f"[VECTOR_SEARCH] Qdrant query FAILED: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
 
     output = []
 
