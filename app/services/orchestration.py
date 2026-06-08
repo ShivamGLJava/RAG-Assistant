@@ -5,9 +5,10 @@ Main pipeline orchestrator that connects:
 """
 
 import os
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from app.models.schemas import QueryResponse, Citation
+from app.models.schemas import QueryResponse, Citation, TelemetryData, TimingData
 from app.services.grounding import HallucinationFirewall
 from app.services.rrf_fusion import compute_rrf
 from app.services.lexical_search import keyword_search
@@ -137,28 +138,39 @@ class QueryOrchestrator:
             metadata_filter: Optional metadata filter (e.g., "Engineering")
 
         Returns:
-            QueryResponse with answer, citations, and status
+            QueryResponse with answer, citations, status, and telemetry
         """
+        pipeline_start = time.time()
+        timings = []
+        firewall_confidence = 0.0
+
         try:
-            # Step 1: Get RRF results (mock or real)
+            # Step 1: Get RRF results (retrieval + ranking)
             print(f"\n[ORCHESTRATION] Processing query: {user_query[:50]}...")
+            retrieval_start = time.time()
             rrf_results = self._get_search_results(user_query, metadata_filter)
+            retrieval_duration = (time.time() - retrieval_start) * 1000
+            timings.append(TimingData(stage="retrieval", duration_ms=retrieval_duration))
 
             if not rrf_results:
                 print("[ORCHESTRATION] No search results found")
                 return self._create_no_results_response(user_query)
 
-            print(f"[ORCHESTRATION] Retrieved {len(rrf_results)} chunks")
+            print(f"[ORCHESTRATION] Retrieved {len(rrf_results)} chunks in {retrieval_duration:.2f}ms")
 
             # Step 2: Apply hallucination firewall
+            firewall_start = time.time()
             can_answer, top_chunks = self.firewall.should_call_llm(rrf_results)
+            firewall_duration = (time.time() - firewall_start) * 1000
+            timings.append(TimingData(stage="firewall", duration_ms=firewall_duration))
 
             if not can_answer:
                 print("[ORCHESTRATION] Hallucination firewall BLOCKED answer (low confidence)")
                 return self._create_firewall_blocked_response(rrf_results[0] if rrf_results else None)
 
             top_score = rrf_results[0].get("rrf_score", 0.0)
-            print(f"[ORCHESTRATION] Hallucination firewall ALLOWED answer (score: {top_score:.2f})")
+            firewall_confidence = top_score
+            print(f"[ORCHESTRATION] Hallucination firewall ALLOWED answer (score: {top_score:.2f}) in {firewall_duration:.2f}ms")
 
             # Step 3: Build context and call Gemini LLM
             context_blocks = []
@@ -177,13 +189,16 @@ class QueryOrchestrator:
 
             try:
                 print("[ORCHESTRATION] Calling Gemini LLM...")
+                llm_start = time.time()
                 client = _get_client()
                 response = await client.aio.models.generate_content(
                     model="gemini-2.5-flash",
                     contents=system_prompt
                 )
                 answer = response.text
-                print(f"[ORCHESTRATION] Gemini response: {answer[:100]}...")
+                llm_duration = (time.time() - llm_start) * 1000
+                timings.append(TimingData(stage="llm", duration_ms=llm_duration))
+                print(f"[ORCHESTRATION] Gemini response in {llm_duration:.2f}ms: {answer[:100]}...")
             except Exception as e:
                 print(f"[ORCHESTRATION] LLM FAILED: {type(e).__name__}: {str(e)}")
                 import traceback
@@ -197,15 +212,32 @@ class QueryOrchestrator:
             print("[ORCHESTRATION] LLM generated answer successfully")
 
             # Step 4: Format response with citations
+            format_start = time.time()
             citations = self._format_citations(top_chunks)
+            format_duration = (time.time() - format_start) * 1000
+            timings.append(TimingData(stage="formatting", duration_ms=format_duration))
+
+            # Calculate total and identify bottleneck
+            total_duration = (time.time() - pipeline_start) * 1000
+            bottleneck_stage = max(timings, key=lambda t: t.duration_ms).stage if timings else "unknown"
+
+            # Create telemetry data
+            telemetry = TelemetryData(
+                total_duration_ms=total_duration,
+                timings=timings,
+                bottleneck_stage=bottleneck_stage,
+                firewall_confidence_score=firewall_confidence
+            )
+
             response = QueryResponse(
                 answer=answer,
                 citations=citations,
                 status="success",
-                confidence_score=top_score
+                confidence_score=top_score,
+                telemetry=telemetry
             )
 
-            print("[ORCHESTRATION] Query completed successfully")
+            print(f"[ORCHESTRATION] Query completed in {total_duration:.2f}ms (bottleneck: {bottleneck_stage})")
             return response
 
         except Exception as e:

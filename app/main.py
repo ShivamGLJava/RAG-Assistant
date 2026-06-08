@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -47,9 +47,22 @@ class ContextChunk(BaseModel):
     text_content: str
 
 
+class TimingInfo(BaseModel):
+    stage: str
+    duration_ms: float
+
+
+class TelemetryInfo(BaseModel):
+    total_duration_ms: float
+    timings: List[TimingInfo]
+    bottleneck_stage: str
+    firewall_confidence_score: float
+
+
 class QueryResponse(BaseModel):
     answer: str
     context_chunks: List[ContextChunk]
+    telemetry: Optional[TelemetryInfo] = None
 
 
 app = FastAPI(
@@ -167,7 +180,7 @@ async def options_search():
     return {}
 
 
-@app.post("/api/v1/search", response_model=QueryResponse, tags=["RAG"])
+@app.post("/api/v1/search", tags=["RAG"])
 async def search(request: QueryRequest):
     """
     Core hybrid retrieval and answer generation orchestration.
@@ -191,7 +204,19 @@ async def search(request: QueryRequest):
                 )
             )
 
-    return QueryResponse(answer=response.answer, context_chunks=context_chunks)
+    # Convert telemetry if present
+    telemetry_info = None
+    if response.telemetry:
+        telemetry_info = TelemetryInfo(
+            total_duration_ms=response.telemetry.total_duration_ms,
+            timings=[TimingInfo(stage=t.stage, duration_ms=t.duration_ms) for t in response.telemetry.timings],
+            bottleneck_stage=response.telemetry.bottleneck_stage,
+            firewall_confidence_score=response.telemetry.firewall_confidence_score
+        )
+
+    result = QueryResponse(answer=response.answer, context_chunks=context_chunks, telemetry=telemetry_info)
+    # Return as dict to ensure FastAPI includes all fields including optional telemetry
+    return result.model_dump(exclude_none=False)
 
 
 if __name__ == "__main__":

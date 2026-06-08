@@ -48,6 +48,7 @@ const api = {
         })),
         status: 'success',
         confidence_score: 0.85,
+        telemetry: data.telemetry || null,
       };
     } catch (error) {
       console.error(`[API] Query failed:`, error.message);
