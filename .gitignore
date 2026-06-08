@@ -14,10 +14,12 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Qdrant local database
+# Qdrant Vector & Local Database Caches
 qdrant_data/
 app/services/qdrant_data/
+*.lock
 
-# Python cache
+# Python Binary Caches
 __pycache__/
 *.pyc
+=======

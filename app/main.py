@@ -10,6 +10,8 @@ from app.services.lexical_search import keyword_search
 from app.services.rrf_fusion import compute_rrf
 from app.services.grounding import HallucinationFirewall
 from app.services.orchestration import process_query
+from app.models.enhanced_schemas import SearchRequest, SearchResponse
+from app.routes.enhanced_search import router as enhanced_search_router
 
 # Load environment variables from .env file
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -72,6 +74,9 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json"
 )
+
+# Include enhanced search router with full evaluation metrics
+app.include_router(enhanced_search_router)
 
 
 @app.middleware("http")
