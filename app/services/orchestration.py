@@ -19,8 +19,8 @@ _loaded_documents = None  # Cache for loaded PDF documents
 
 def _load_real_documents() -> List[Dict[str, Any]]:
     """
-    Load and chunk real documents from AWS.pdf and FAQs.pdf.
-    Used as fallback when Engineer 1's database isn't ready.
+    Load and chunk real documents from AWS.pdf and QnA.pdf.
+    Used as fallback when Engineer 1's database and Qdrant aren't available.
     """
     global _loaded_documents
     if _loaded_documents is not None:
@@ -35,7 +35,7 @@ def _load_real_documents() -> List[Dict[str, Any]]:
 
         pdf_files = {
             "AWS.pdf": "AWS.pdf",
-            "FAQs.pdf": "FAQs.pdf"
+            "QnA.pdf": "QnA.pdf"
         }
 
         for doc_name, pdf_file in pdf_files.items():
@@ -240,7 +240,8 @@ class QueryOrchestrator:
         metadata_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Get search results from RRF (Engineer 4's real implementation).
+        Get search results from hybrid search (sparse + dense via RRF).
+        Prioritizes Qdrant vector database when available, falls back to keyword search.
 
         Args:
             query: Search query
@@ -249,36 +250,37 @@ class QueryOrchestrator:
         Returns:
             List of ranked results with scores
         """
-        # Get sparse results from PostgreSQL Full-Text Search (Engineer 4)
-        sparse_results = keyword_search(query, top_n=10)
+        sparse_results = []
+        dense_results = []
 
-        # If PostgreSQL unavailable, try simple text search on loaded PDFs
+        # 1. Try Qdrant Vector Search (Engineer 2's vector database)
+        try:
+            from app.services.vector_search import semantic_search
+            dense_results = semantic_search(query, limit=10)
+            if dense_results:
+                print(f"[ORCHESTRATION] Found {len(dense_results)} results from Qdrant vector search")
+        except Exception as e:
+            print(f"[ORCHESTRATION] Warning: Vector search unavailable ({type(e).__name__}), using keyword search only")
+
+        # 2. Try PostgreSQL Full-Text Search (Engineer 1's database)
+        try:
+            sparse_results = keyword_search(query, top_n=10)
+            if sparse_results:
+                print(f"[ORCHESTRATION] Found {len(sparse_results)} results from keyword search")
+        except Exception as e:
+            print(f"[ORCHESTRATION] Warning: Keyword search failed ({type(e).__name__})")
+
+        # 3. If keyword search unavailable, try simple text search on loaded PDFs
         if not sparse_results:
             loaded_docs = _load_real_documents()
             if loaded_docs:
                 sparse_results = self._simple_text_search(query, loaded_docs, top_n=10)
                 if sparse_results:
-                    print(f"[ORCHESTRATION] Found {len(sparse_results)} results via simple text search")
+                    print(f"[ORCHESTRATION] Found {len(sparse_results)} results via PDF text search")
 
-        # Get dense results from Qdrant Vector Database (Engineer 2)
-        dense_results = []
-        try:
-            from app.services.vector_search import semantic_search
-            dense_results = semantic_search(query, limit=10)
-        except ImportError:
-            print(f"[ORCHESTRATION] Warning: Vector search dependencies not available, skipping dense search")
-        except Exception as e:
-            print(f"[ORCHESTRATION] Warning: Vector search failed ({str(e)}), using keyword search only")
-            dense_results = []
-
-        # Use Engineer 4's RRF to combine and rank results
-        # If sparse_results empty (PostgreSQL unavailable), use dense results
-        if not sparse_results:
-            sparse_results = dense_results.copy() if dense_results else []
-
-        # Fallback to mock data if both search methods return nothing
+        # 4. Fallback to mock data if all search methods fail
         if not dense_results and not sparse_results:
-            print(f"[ORCHESTRATION] No real search results found, using mock data for testing")
+            print(f"[ORCHESTRATION] No search results found, using mock fallback data")
             sparse_results = self._get_mock_fallback_data()
 
         results = compute_rrf(dense_results, sparse_results, k=3, top_n=3)

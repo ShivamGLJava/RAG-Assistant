@@ -19,7 +19,7 @@ _client = None
 
 DOCUMENTS = {
     "aws": "AWS.pdf",
-    "faqs": "FAQs.pdf"
+    "qna": "QnA.pdf"
 }
 
 
@@ -86,14 +86,14 @@ async def cors_middleware(request, call_next):
 async def _fetch_vector_search_results(query: str) -> list:
     """
     Fetch dense vector search results from cloud infrastructure context.
-    Grounded by text blocks extracted from AWS.pdf and FAQs.pdf.
+    Grounded by text blocks extracted from AWS.pdf and QnA.pdf.
     """
     return [
         {
             "chunk_id": "faq_001_seven_rs",
             "text_content": "A critical first step is collecting application portfolio data evaluated against the seven common migration strategies (7 Rs): refactor, replatform, repurchase, rehost, relocate, retain, and retire.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Migration Strategies",
                 "page": 6
             }
@@ -111,7 +111,7 @@ async def _fetch_vector_search_results(query: str) -> list:
             "chunk_id": "faq_002_discovery_rules",
             "text_content": "When assessing if an application can be retired, you must confirm that workloads aren't dependent on it. Use discovery tooling to show connections initiated to a server scheduled for retirement.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Network Auditing",
                 "page": 6
             }
@@ -129,7 +129,7 @@ async def _fetch_vector_search_results(query: str) -> list:
             "chunk_id": "faq_003_controlled_stops",
             "text_content": "In your migration plan, schedule time for a controlled stop. A controlled stop pauses the migration process to identify the potential for disruption if an application is retired by simulating the retirement.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Application Lifecycle",
                 "page": 8
             }
