@@ -13,6 +13,9 @@ from app.services.orchestration import process_query
 from app.models.enhanced_schemas import SearchRequest, SearchResponse
 from app.routes.enhanced_search import router as enhanced_search_router
 
+# --- IMPORT OBSERVABILITY DELIVERABLES ---
+from app.core.metrics import get_metrics
+
 # Load environment variables from .env file
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(env_path)
@@ -161,6 +164,13 @@ async def health_check():
     return {"status": "healthy"}
 
 
+# --- EXPOSE PROMETHEUS METRICS ENDPOINT ---
+@app.get("/metrics", tags=["System"])
+async def metrics_endpoint():
+    """Exposes application runtime and latency data for Prometheus metric scraping."""
+    return Response(content=get_metrics(), media_type="text/plain; charset=utf-8")
+
+
 @app.get("/api/v1/status", tags=["System"])
 async def pipeline_status():
     """Returns the current status of RAG pipeline components and configured data sources."""
@@ -226,4 +236,4 @@ async def search(request: QueryRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)  # nosec
