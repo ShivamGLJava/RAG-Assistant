@@ -5,9 +5,10 @@ Main pipeline orchestrator that connects:
 """
 
 import os
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from app.models.schemas import QueryResponse, Citation
+from app.models.schemas import QueryResponse, Citation, TelemetryData, TimingData
 from app.services.grounding import HallucinationFirewall
 from app.services.rrf_fusion import compute_rrf
 from app.services.lexical_search import keyword_search
@@ -19,8 +20,8 @@ _loaded_documents = None  # Cache for loaded PDF documents
 
 def _load_real_documents() -> List[Dict[str, Any]]:
     """
-    Load and chunk real documents from AWS.pdf and FAQs.pdf.
-    Used as fallback when Engineer 1's database isn't ready.
+    Load and chunk real documents from AWS.pdf and QnA.pdf.
+    Used as fallback when Engineer 1's database and Qdrant aren't available.
     """
     global _loaded_documents
     if _loaded_documents is not None:
@@ -35,7 +36,7 @@ def _load_real_documents() -> List[Dict[str, Any]]:
 
         pdf_files = {
             "AWS.pdf": "AWS.pdf",
-            "FAQs.pdf": "FAQs.pdf"
+            "QnA.pdf": "QnA.pdf"
         }
 
         for doc_name, pdf_file in pdf_files.items():
@@ -137,28 +138,39 @@ class QueryOrchestrator:
             metadata_filter: Optional metadata filter (e.g., "Engineering")
 
         Returns:
-            QueryResponse with answer, citations, and status
+            QueryResponse with answer, citations, status, and telemetry
         """
+        pipeline_start = time.time()
+        timings = []
+        firewall_confidence = 0.0
+
         try:
-            # Step 1: Get RRF results (mock or real)
+            # Step 1: Get RRF results (retrieval + ranking)
             print(f"\n[ORCHESTRATION] Processing query: {user_query[:50]}...")
+            retrieval_start = time.time()
             rrf_results = self._get_search_results(user_query, metadata_filter)
+            retrieval_duration = (time.time() - retrieval_start) * 1000
+            timings.append(TimingData(stage="retrieval", duration_ms=retrieval_duration))
 
             if not rrf_results:
                 print("[ORCHESTRATION] No search results found")
                 return self._create_no_results_response(user_query)
 
-            print(f"[ORCHESTRATION] Retrieved {len(rrf_results)} chunks")
+            print(f"[ORCHESTRATION] Retrieved {len(rrf_results)} chunks in {retrieval_duration:.2f}ms")
 
             # Step 2: Apply hallucination firewall
+            firewall_start = time.time()
             can_answer, top_chunks = self.firewall.should_call_llm(rrf_results)
+            firewall_duration = (time.time() - firewall_start) * 1000
+            timings.append(TimingData(stage="firewall", duration_ms=firewall_duration))
 
             if not can_answer:
                 print("[ORCHESTRATION] Hallucination firewall BLOCKED answer (low confidence)")
                 return self._create_firewall_blocked_response(rrf_results[0] if rrf_results else None)
 
             top_score = rrf_results[0].get("rrf_score", 0.0)
-            print(f"[ORCHESTRATION] Hallucination firewall ALLOWED answer (score: {top_score:.2f})")
+            firewall_confidence = top_score
+            print(f"[ORCHESTRATION] Hallucination firewall ALLOWED answer (score: {top_score:.2f}) in {firewall_duration:.2f}ms")
 
             # Step 3: Build context and call Gemini LLM
             context_blocks = []
@@ -177,13 +189,16 @@ class QueryOrchestrator:
 
             try:
                 print("[ORCHESTRATION] Calling Gemini LLM...")
+                llm_start = time.time()
                 client = _get_client()
                 response = await client.aio.models.generate_content(
                     model="gemini-2.5-flash",
                     contents=system_prompt
                 )
                 answer = response.text
-                print(f"[ORCHESTRATION] Gemini response: {answer[:100]}...")
+                llm_duration = (time.time() - llm_start) * 1000
+                timings.append(TimingData(stage="llm", duration_ms=llm_duration))
+                print(f"[ORCHESTRATION] Gemini response in {llm_duration:.2f}ms: {answer[:100]}...")
             except Exception as e:
                 print(f"[ORCHESTRATION] LLM FAILED: {type(e).__name__}: {str(e)}")
                 import traceback
@@ -197,15 +212,32 @@ class QueryOrchestrator:
             print("[ORCHESTRATION] LLM generated answer successfully")
 
             # Step 4: Format response with citations
+            format_start = time.time()
             citations = self._format_citations(top_chunks)
+            format_duration = (time.time() - format_start) * 1000
+            timings.append(TimingData(stage="formatting", duration_ms=format_duration))
+
+            # Calculate total and identify bottleneck
+            total_duration = (time.time() - pipeline_start) * 1000
+            bottleneck_stage = max(timings, key=lambda t: t.duration_ms).stage if timings else "unknown"
+
+            # Create telemetry data
+            telemetry = TelemetryData(
+                total_duration_ms=total_duration,
+                timings=timings,
+                bottleneck_stage=bottleneck_stage,
+                firewall_confidence_score=firewall_confidence
+            )
+
             response = QueryResponse(
                 answer=answer,
                 citations=citations,
                 status="success",
-                confidence_score=top_score
+                confidence_score=top_score,
+                telemetry=telemetry
             )
 
-            print("[ORCHESTRATION] Query completed successfully")
+            print(f"[ORCHESTRATION] Query completed in {total_duration:.2f}ms (bottleneck: {bottleneck_stage})")
             return response
 
         except Exception as e:
@@ -240,7 +272,8 @@ class QueryOrchestrator:
         metadata_filter: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Get search results from RRF (Engineer 4's real implementation).
+        Get search results from hybrid search (sparse + dense via RRF).
+        Prioritizes Qdrant vector database when available, falls back to keyword search.
 
         Args:
             query: Search query
@@ -249,39 +282,41 @@ class QueryOrchestrator:
         Returns:
             List of ranked results with scores
         """
-        # Get sparse results from PostgreSQL Full-Text Search (Engineer 4)
-        sparse_results = keyword_search(query, top_n=10)
+        sparse_results = []
+        dense_results = []
 
-        # If PostgreSQL unavailable, try simple text search on loaded PDFs
+        # 1. Try Qdrant Vector Search (Engineer 2's vector database)
+        try:
+            from app.services.vector_search import semantic_search
+            dense_results = semantic_search(query, limit=10)
+            if dense_results:
+                print(f"[ORCHESTRATION] Found {len(dense_results)} results from Qdrant vector search")
+        except Exception as e:
+            print(f"[ORCHESTRATION] Warning: Vector search unavailable ({type(e).__name__}), using keyword search only")
+
+        # 2. Try PostgreSQL Full-Text Search (Engineer 1's database)
+        try:
+            sparse_results = keyword_search(query, top_n=10)
+            if sparse_results:
+                print(f"[ORCHESTRATION] Found {len(sparse_results)} results from keyword search")
+        except Exception as e:
+            print(f"[ORCHESTRATION] Warning: Keyword search failed ({type(e).__name__})")
+
+        # 3. If keyword search unavailable, try simple text search on loaded PDFs
         if not sparse_results:
             loaded_docs = _load_real_documents()
             if loaded_docs:
                 sparse_results = self._simple_text_search(query, loaded_docs, top_n=10)
                 if sparse_results:
-                    print(f"[ORCHESTRATION] Found {len(sparse_results)} results via simple text search")
+                    print(f"[ORCHESTRATION] Found {len(sparse_results)} results via PDF text search")
 
-        # Get dense results from Qdrant Vector Database (Engineer 2)
-        dense_results = []
-        try:
-            from app.services.vector_search import semantic_search
-            dense_results = semantic_search(query, limit=10)
-        except ImportError:
-            print(f"[ORCHESTRATION] Warning: Vector search dependencies not available, skipping dense search")
-        except Exception as e:
-            print(f"[ORCHESTRATION] Warning: Vector search failed ({str(e)}), using keyword search only")
-            dense_results = []
-
-        # Use Engineer 4's RRF to combine and rank results
-        # If sparse_results empty (PostgreSQL unavailable), use dense results
-        if not sparse_results:
-            sparse_results = dense_results.copy() if dense_results else []
-
-        # Fallback to mock data if both search methods return nothing
+        # 4. Fallback to mock data if all search methods fail
         if not dense_results and not sparse_results:
-            print(f"[ORCHESTRATION] No real search results found, using mock data for testing")
+            print(f"[ORCHESTRATION] No search results found, using mock fallback data")
             sparse_results = self._get_mock_fallback_data()
 
-        results = compute_rrf(dense_results, sparse_results, k=60, top_n=3)
+        results = compute_rrf(dense_results, sparse_results, k=3, top_n=3)
+
 
         # Convert Engineer 4's format to our expected format
         converted_results = []

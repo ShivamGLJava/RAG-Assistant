@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -10,6 +10,11 @@ from app.services.lexical_search import keyword_search
 from app.services.rrf_fusion import compute_rrf
 from app.services.grounding import HallucinationFirewall
 from app.services.orchestration import process_query
+from app.models.enhanced_schemas import SearchRequest, SearchResponse
+from app.routes.enhanced_search import router as enhanced_search_router
+
+# --- IMPORT OBSERVABILITY DELIVERABLES ---
+from app.core.metrics import get_metrics
 
 # Load environment variables from .env file
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -19,7 +24,7 @@ _client = None
 
 DOCUMENTS = {
     "aws": "AWS.pdf",
-    "faqs": "FAQs.pdf"
+    "qna": "QnA.pdf"
 }
 
 
@@ -47,9 +52,22 @@ class ContextChunk(BaseModel):
     text_content: str
 
 
+class TimingInfo(BaseModel):
+    stage: str
+    duration_ms: float
+
+
+class TelemetryInfo(BaseModel):
+    total_duration_ms: float
+    timings: List[TimingInfo]
+    bottleneck_stage: str
+    firewall_confidence_score: float
+
+
 class QueryResponse(BaseModel):
     answer: str
     context_chunks: List[ContextChunk]
+    telemetry: Optional[TelemetryInfo] = None
 
 
 app = FastAPI(
@@ -59,6 +77,9 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json"
 )
+
+# Include enhanced search router with full evaluation metrics
+app.include_router(enhanced_search_router)
 
 
 @app.middleware("http")
@@ -86,14 +107,14 @@ async def cors_middleware(request, call_next):
 async def _fetch_vector_search_results(query: str) -> list:
     """
     Fetch dense vector search results from cloud infrastructure context.
-    Grounded by text blocks extracted from AWS.pdf and FAQs.pdf.
+    Grounded by text blocks extracted from AWS.pdf and QnA.pdf.
     """
     return [
         {
             "chunk_id": "faq_001_seven_rs",
             "text_content": "A critical first step is collecting application portfolio data evaluated against the seven common migration strategies (7 Rs): refactor, replatform, repurchase, rehost, relocate, retain, and retire.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Migration Strategies",
                 "page": 6
             }
@@ -111,7 +132,7 @@ async def _fetch_vector_search_results(query: str) -> list:
             "chunk_id": "faq_002_discovery_rules",
             "text_content": "When assessing if an application can be retired, you must confirm that workloads aren't dependent on it. Use discovery tooling to show connections initiated to a server scheduled for retirement.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Network Auditing",
                 "page": 6
             }
@@ -129,7 +150,7 @@ async def _fetch_vector_search_results(query: str) -> list:
             "chunk_id": "faq_003_controlled_stops",
             "text_content": "In your migration plan, schedule time for a controlled stop. A controlled stop pauses the migration process to identify the potential for disruption if an application is retired by simulating the retirement.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Application Lifecycle",
                 "page": 8
             }
@@ -141,6 +162,13 @@ async def _fetch_vector_search_results(query: str) -> list:
 async def health_check():
     """Service liveness probe."""
     return {"status": "healthy"}
+
+
+# --- EXPOSE PROMETHEUS METRICS ENDPOINT ---
+@app.get("/metrics", tags=["System"])
+async def metrics_endpoint():
+    """Exposes application runtime and latency data for Prometheus metric scraping."""
+    return Response(content=get_metrics(), media_type="text/plain; charset=utf-8")
 
 
 @app.get("/api/v1/status", tags=["System"])
@@ -167,7 +195,7 @@ async def options_search():
     return {}
 
 
-@app.post("/api/v1/search", response_model=QueryResponse, tags=["RAG"])
+@app.post("/api/v1/search", tags=["RAG"])
 async def search(request: QueryRequest):
     """
     Core hybrid retrieval and answer generation orchestration.
@@ -191,9 +219,21 @@ async def search(request: QueryRequest):
                 )
             )
 
-    return QueryResponse(answer=response.answer, context_chunks=context_chunks)
+    # Convert telemetry if present
+    telemetry_info = None
+    if response.telemetry:
+        telemetry_info = TelemetryInfo(
+            total_duration_ms=response.telemetry.total_duration_ms,
+            timings=[TimingInfo(stage=t.stage, duration_ms=t.duration_ms) for t in response.telemetry.timings],
+            bottleneck_stage=response.telemetry.bottleneck_stage,
+            firewall_confidence_score=response.telemetry.firewall_confidence_score
+        )
+
+    result = QueryResponse(answer=response.answer, context_chunks=context_chunks, telemetry=telemetry_info)
+    # Return as dict to ensure FastAPI includes all fields including optional telemetry
+    return result.model_dump(exclude_none=False)
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)  # nosec
