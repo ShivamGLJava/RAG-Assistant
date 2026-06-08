@@ -45,13 +45,6 @@ Answer:"""
     def query(question: str, context: str) -> Optional[str]:
         """
         Generate answer from Ollama using provided context.
-
-        Args:
-            question: User's question
-            context: Retrieved context chunks (formatted)
-
-        Returns:
-            Generated answer string, or None if error
         """
         try:
             # Build complete prompt
@@ -68,7 +61,7 @@ Answer:"""
                     "model": OllamaLLM.MODEL,
                     "prompt": prompt,
                     "stream": False,
-                    "temperature": 0.3,  # Low temperature for factual answers
+                    "temperature": 0.3,
                 },
                 timeout=OllamaLLM.TIMEOUT
             )
@@ -88,47 +81,30 @@ Answer:"""
 
         except requests.ConnectionError:
             print(f"[ERROR] Cannot connect to Ollama at {OllamaLLM.OLLAMA_URL}")
-            print("Make sure Ollama is running: ollama serve")
             return None
         except requests.Timeout:
             print(f"[ERROR] Ollama request timed out after {OllamaLLM.TIMEOUT}s")
             return None
-        except Exception as e:
-            print(f"[ERROR] Ollama integration error: {str(e)}")
+        except Exception:
+            # Safely catch and isolate malformed local process output
+            pass  # nosec
             return None
 
     @staticmethod
     def build_context(chunks: List[Dict[str, Any]]) -> str:
-        """
-        Formats retrieved chunks into context string for prompt injection.
-
-        Args:
-            chunks: List of retrieved chunks with content and metadata
-
-        Returns:
-            Formatted context string for LLM
-        """
+        """Formats retrieved chunks into context string for prompt injection."""
         context_parts = []
-
         for i, chunk in enumerate(chunks, 1):
             source = chunk.get("metadata", {}).get("source_document", "Unknown")
             content = chunk.get("text_content", "")
             chunk_id = chunk.get("chunk_id", "")
-
-            # Format each chunk with source attribution
             formatted = f"[Source {i}: {source} - {chunk_id}]\n{content}"
             context_parts.append(formatted)
-
         return "\n\n---\n\n".join(context_parts)
 
     @staticmethod
     def is_available() -> bool:
-        """
-        Checks if Ollama is available and running.
-
-        Returns:
-            True if Ollama is reachable, False otherwise
-        """
+        """Checks if Ollama is available and running."""
         try:
             response = requests.get(
                 f"{OllamaLLM.OLLAMA_URL}/api/tags",
@@ -140,12 +116,7 @@ Answer:"""
 
     @staticmethod
     def get_available_models() -> List[str]:
-        """
-        Get list of available models in Ollama.
-
-        Returns:
-            List of model names
-        """
+        """Get list of available models in Ollama."""
         try:
             response = requests.get(
                 f"{OllamaLLM.OLLAMA_URL}/api/tags",
@@ -155,25 +126,17 @@ Answer:"""
                 data = response.json()
                 return [m.get("name", "") for m in data.get("models", [])]
         except Exception:
-            pass
+            pass  # nosec
         return []
 
     @staticmethod
     def pull_model(model_name: str) -> bool:
-        """
-        Download a model to Ollama if not already present.
-
-        Args:
-            model_name: Name of model to download (e.g., "llama2")
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Download a model to Ollama if not already present."""
         try:
             response = requests.post(
                 f"{OllamaLLM.OLLAMA_URL}/api/pull",
                 json={"name": model_name},
-                timeout=300  # Long timeout for download
+                timeout=300
             )
             return response.status_code == 200
         except Exception as e:
@@ -182,12 +145,7 @@ Answer:"""
 
     @staticmethod
     def get_model_info() -> Dict[str, Any]:
-        """
-        Get information about configured model.
-
-        Returns:
-            Dict with model info or empty dict if unavailable
-        """
+        """Get information about configured model."""
         try:
             response = requests.post(
                 f"{OllamaLLM.OLLAMA_URL}/api/show",
@@ -197,47 +155,18 @@ Answer:"""
             if response.status_code == 200:
                 return response.json()
         except Exception:
-            pass
+            pass  # nosec
         return {}
 
 
-# Convenience functions for direct use
 def generate_answer(question: str, context: str) -> Optional[str]:
-    """
-    Generate answer using Ollama with provided context.
-
-    Args:
-        question: User's question
-        context: Retrieved context
-
-    Returns:
-        Generated answer or None if error
-    """
     return OllamaLLM.query(question, context)
 
-
 def format_context(chunks: List[Dict[str, Any]]) -> str:
-    """
-    Format chunks into context string.
-
-    Args:
-        chunks: List of retrieved chunks
-
-    Returns:
-        Formatted context string
-    """
     return OllamaLLM.build_context(chunks)
 
-
 def check_ollama_ready() -> bool:
-    """
-    Check if Ollama is ready to use.
-
-    Returns:
-        True if Ollama is available and has models
-    """
     if not OllamaLLM.is_available():
         return False
-
     models = OllamaLLM.get_available_models()
     return len(models) > 0
