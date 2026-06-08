@@ -12,7 +12,7 @@ def keyword_search(query: str, top_n: int = None) -> List[Dict[str, Any]]:
     """
     Execute keyword-based lexical search on document corpus.
     Returns list of dictionaries with chunk_id, text_content, and metadata.
-    Grounded in AWS.pdf and FAQs.pdf content.
+    Grounded in AWS.pdf and QnA.pdf content.
 
     Args:
         query: User search query string
@@ -33,7 +33,7 @@ def keyword_search(query: str, top_n: int = None) -> List[Dict[str, Any]]:
             "chunk_id": "faq_001_seven_rs",
             "text_content": "A critical first step is collecting application portfolio data evaluated against the seven common migration strategies (7 Rs): refactor, replatform, repurchase, rehost, relocate, retain, and retire.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Migration Strategies",
                 "page": 6,
                 "chunk_size": FIXED_CHUNK_SIZE
@@ -53,7 +53,7 @@ def keyword_search(query: str, top_n: int = None) -> List[Dict[str, Any]]:
             "chunk_id": "faq_002_discovery_rules",
             "text_content": "When assessing if an application can be retired, you must confirm that workloads aren't dependent on it. Use discovery tooling to show connections initiated to a server scheduled for retirement.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Network Auditing",
                 "page": 6,
                 "chunk_size": FIXED_CHUNK_SIZE
@@ -73,7 +73,7 @@ def keyword_search(query: str, top_n: int = None) -> List[Dict[str, Any]]:
             "chunk_id": "faq_003_controlled_stops",
             "text_content": "In your migration plan, schedule time for a controlled stop. A controlled stop pauses the migration process to identify the potential for disruption if an application is retired by simulating the retirement.",
             "metadata": {
-                "source_document": "FAQs.pdf",
+                "source_document": "QnA.pdf",
                 "section": "Application Lifecycle",
                 "page": 8,
                 "chunk_size": FIXED_CHUNK_SIZE

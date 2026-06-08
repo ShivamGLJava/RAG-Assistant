@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import MessageList from './MessageList';
 import InputField from './InputField';
+import TelemetryPanel from './TelemetryPanel';
 import api from '../services/api';
 import '../styles/ChatInterface.css';
 
@@ -13,6 +14,7 @@ function ChatInterface() {
   const [loading, setLoading] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const [useMockData, setUseMockData] = useState(false);
+  const [telemetry, setTelemetry] = useState(null);
 
   // Check if backend is available on mount
   useEffect(() => {
@@ -43,6 +45,7 @@ function ChatInterface() {
     };
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
+    setTelemetry(null);
 
     try {
       let response;
@@ -55,6 +58,11 @@ function ChatInterface() {
         response = await api.query(userQuery);
       }
 
+      // Extract telemetry data if present
+      if (response.telemetry) {
+        setTelemetry(response.telemetry);
+      }
+
       // Handle response based on status
       if (response.status === 'no_reliable_answer') {
         // Hallucination firewall blocked the answer
@@ -65,6 +73,7 @@ function ChatInterface() {
             content: response.answer,
             sources: [],
             confidenceScore: response.confidence_score || 0,
+            telemetry: response.telemetry || null,
           },
         ]);
       } else if (response.status === 'success') {
@@ -76,6 +85,7 @@ function ChatInterface() {
             content: response.answer,
             sources: response.sources || [],
             confidenceScore: response.confidence_score || 0,
+            telemetry: response.telemetry || null,
           },
         ]);
       } else if (response.status === 'error') {
@@ -88,6 +98,7 @@ function ChatInterface() {
             error: true,
             sources: response.sources || [],
             confidenceScore: response.confidence_score || 0,
+            telemetry: response.telemetry || null,
           },
         ]);
       } else {
@@ -99,6 +110,7 @@ function ChatInterface() {
             content: response.answer || 'No response received',
             sources: response.sources || [],
             confidenceScore: response.confidence_score || 0,
+            telemetry: response.telemetry || null,
           },
         ]);
       }
@@ -153,6 +165,8 @@ function ChatInterface() {
           )}
         </div>
       </div>
+
+      <TelemetryPanel telemetry={telemetry} isLoading={loading} />
 
       <MessageList messages={messages} />
 
