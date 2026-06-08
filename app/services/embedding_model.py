@@ -20,7 +20,6 @@ if not HF_TOKEN:
     raise ValueError("HF_TOKEN is required but not set in .env")
 
 print(f"[OK] HF_TOKEN found in .env")
-print(f"[OK] Token starts with: {HF_TOKEN[:20]}...")
 print(f"[OK] Embedding model: {EMBEDDING_MODEL}")
 print(f"[OK] Model description: IBM Granite 311M (multilingual embeddings)")
 
